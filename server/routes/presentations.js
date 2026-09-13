@@ -15,6 +15,23 @@ const router = express.Router();
 
 const ALLOWED_EXT = new Set(['.pptx', '.ppt', '.odp', '.pdf']);
 
+// Multer/busboy отдают originalname как latin1-декодированную строку байт multipart-заголовка,
+// даже если браузер прислал имя в UTF-8. Перекодируем обратно, чтобы кириллица и другие
+// не-ASCII символы отображались корректно, а не как "кракозябры".
+function fixFilenameEncoding(name) {
+  if (!name) return name;
+  try {
+    const fixed = Buffer.from(name, 'latin1').toString('utf8');
+    // Buffer.from(...).toString() не бросает исключений на некорректных последовательностях —
+    // используем эвристику: если после перекодировки нет символов "replacement character",
+    // считаем результат правильным.
+    if (!fixed.includes('\uFFFD')) return fixed;
+    return name;
+  } catch {
+    return name;
+  }
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
@@ -27,6 +44,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 300 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
+    file.originalname = fixFilenameEncoding(file.originalname);
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
       return cb(new Error('Поддерживаются файлы форматов: .pptx, .ppt, .odp, .pdf'));
