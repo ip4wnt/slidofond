@@ -40,13 +40,36 @@ CONTENT_TYPE_BY_EXT = {
     '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
     '.emf': 'image/x-emf', '.wmf': 'image/x-wmf', '.bmp': 'image/bmp', '.tiff': 'image/tiff',
     '.svg': 'image/svg+xml',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xls': 'application/vnd.ms-excel',
+    '.bin': 'application/vnd.openxmlformats-officedocument.presentationml.printerSettings',
 }
 OVERRIDE_CT_BY_PREFIX = [
     ('ppt/slideMasters/slideMaster', 'application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml'),
     ('ppt/slideLayouts/slideLayout', 'application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml'),
     ('ppt/theme/theme', 'application/vnd.openxmlformats-officedocument.theme+xml'),
     ('ppt/slides/slide', 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'),
+    # Точные имена вспомогательных частей, которые main() копирует из первого источника без изменений.
+    # Раньше их Override приходил бесплатно из-за наследования всего шаблонного [Content_Types].xml;
+    # теперь, когда Override строится только по фактическим частям, их нужно прописать явно.
+    ('ppt/presentation.xml', 'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml'),
+    ('ppt/presProps.xml', 'application/vnd.openxmlformats-officedocument.presentationml.presProps+xml'),
+    ('ppt/viewProps.xml', 'application/vnd.openxmlformats-officedocument.presentationml.viewProps+xml'),
+    ('ppt/tableStyles.xml', 'application/vnd.openxmlformats-officedocument.presentationml.tableStyles+xml'),
+    ('docProps/core.xml', 'application/vnd.openxmlformats-package.core-properties+xml'),
+    ('docProps/app.xml', 'application/vnd.openxmlformats-officedocument.extended-properties+xml'),
 ]
+
+# Content-type для "прочих" частей (диаграммы и их зависимости), определяется по relationship
+# type связи, через которую на часть ссылаются — не по расширению файла, т.к. и chart.xml,
+# и chartColors.xml, и slide.xml имеют одно расширение .xml, но разные content-type.
+OTHER_PART_CONTENT_TYPE_BY_RELTYPE = {
+    f'{R_NS}/chart': 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml',
+    f'{R_NS}/chartUserShapes': 'application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml',
+    'http://schemas.microsoft.com/office/2011/relationships/chartColorStyle': 'application/vnd.ms-office.chartcolorstyle+xml',
+    'http://schemas.microsoft.com/office/2011/relationships/chartStyle': 'application/vnd.ms-office.chartstyle+xml',
+    f'{R_NS}/oleObject': 'application/vnd.openxmlformats-officedocument.oleObject',
+}
 
 def qn(ns, tag):
     return f'{{{ns}}}{tag}'
@@ -105,6 +128,7 @@ class OutputPackage:
         self.parts = {}       # part_name -> bytes
         self.rels = {}        # part_name -> list of rel dicts
         self._counters = {'slideMaster': 0, 'slideLayout': 0, 'theme': 0, 'slide': 0, 'media': 0, 'other': 0}
+        self.other_part_content_types = {}  # part_name -> content-type override (для 'other'-частей вроде chart.xml)
 
     def alloc_name(self, kind, ext):
         self._counters[kind] += 1
@@ -120,6 +144,14 @@ class OutputPackage:
     def set_rels(self, part_name, rel_list):
         """rel_list: list of dict(rid, reltype, target, is_external) — target уже относительный путь для internal."""
         self.rels[part_name] = rel_list
+
+    def note_other_part_content_type(self, part_name, reltype, ext):
+        """Запоминает правильный content-type для 'other'-части по типу relationship, через который на
+        неё ссылаются (chart, chartStyle, oleObject...). Если тип связи не требует Override (например embedded
+        .xlsx покрывается Default по расширению), ничего не делает."""
+        ctype = OTHER_PART_CONTENT_TYPE_BY_RELTYPE.get(reltype)
+        if ctype:
+            self.other_part_content_types[part_name] = ctype
 
     def rels_xml_bytes(self, rel_list):
         # Важно: корневой элемент должен быть в дефолтном namespace (xmlns="..."), а не с префиксом
@@ -164,7 +196,52 @@ def copy_media_part(out_pkg, src_pkg, target, referencing_new_part_name):
     return new_name
 
 
-def import_generic_part_with_rels(out_pkg, src_pkg, target, kind, referencing_context):
+def import_other_part(out_pkg, src_pkg, target, reltype, cache):
+    """
+    Копирует произвольную вспомогательную часть пакета (диаграмма, встроенный Excel/OLE-объект,
+    chart style/colors и т.п.) РЕКУРСИВНО вместе с её собственными relationships (например, chart.xml →
+    embedded .xlsx с данными, или chart.xml → chartStyle/chartColors). Без этого chart-парт ссылается на
+    несуществующий rId в итоговом пакете, и PowerPoint отказывается читать весь файл.
+    cache: dict src_target -> new_name, чтобы одна и та же встроенная часть не клонировалась повторно, если на неё
+    ссылается несколько частей (например chart и chartUserShapes на один и тот же embedding).
+    Возвращает имя новой части.
+    """
+    cache_key = (id(src_pkg), target)  # id(src_pkg) — чтобы не путать одинаковые внутренние пути разных исходных файлов
+    if cache_key in cache:
+        return cache[cache_key]
+
+    ext = posixpath.splitext(target)[1]
+    new_name = out_pkg.alloc_name('other', ext)
+    cache[cache_key] = new_name  # регистрируем заранее на случай циклических ссылок
+
+    data = src_pkg.read(target)
+    src_rels = src_pkg.get_rels(target)
+
+    new_rels = []
+    for rel in src_rels:
+        if rel['is_external']:
+            new_rels.append(dict(rel))
+            continue
+        rtype = rel['reltype']
+        rtarget = rel['target']
+        if rtarget.startswith('ppt/media/'):
+            new_media_name = copy_media_part(out_pkg, src_pkg, rtarget, new_name)
+            new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_media_name, new_name), 'is_external': False})
+        else:
+            try:
+                src_pkg.read(rtarget)
+            except KeyError:
+                continue
+            nested_new_name = import_other_part(out_pkg, src_pkg, rtarget, rtype, cache)
+            new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(nested_new_name, new_name), 'is_external': False})
+
+    out_pkg.add_part(new_name, data)
+    out_pkg.set_rels(new_name, new_rels)
+    out_pkg.note_other_part_content_type(new_name, reltype, ext)
+    return new_name
+
+
+def import_generic_part_with_rels(out_pkg, src_pkg, target, kind, referencing_context, other_cache):
     """
     Копирует произвольную XML-часть (например slideLayout) вместе со всеми её relationships,
     рекурсивно копируя зависимые части (тема, медиа). Не рекурсирует в slideMaster (для layout
@@ -203,23 +280,23 @@ def import_generic_part_with_rels(out_pkg, src_pkg, target, kind, referencing_co
             rid_map[rel['rid']] = new_rid
             new_rels.append({'rid': new_rid, 'reltype': rtype, 'target': rel_target_path(new_media_name, new_name), 'is_external': False})
         else:
-            # Прочие вложенные XML-части (редко встречаются на layout/master уровне) — копируем как есть без рекурсии
+            # Прочие вложенные части (диаграммы и их зависимости, встречаются в т.ч. на layout/master
+            # уровне) — копируем РЕКУРСИВНО вместе с их собственными relationships.
             try:
-                raw = src_pkg.read(rtarget)
-                new_other_name = out_pkg.alloc_name('other', posixpath.splitext(rtarget)[1])
-                out_pkg.add_part(new_other_name, raw)
-                new_rid = rel['rid']
-                rid_map[rel['rid']] = new_rid
-                new_rels.append({'rid': new_rid, 'reltype': rtype, 'target': rel_target_path(new_other_name, new_name), 'is_external': False})
+                src_pkg.read(rtarget)
             except KeyError:
                 continue
+            new_other_name = import_other_part(out_pkg, src_pkg, rtarget, rtype, other_cache)
+            new_rid = rel['rid']
+            rid_map[rel['rid']] = new_rid
+            new_rels.append({'rid': new_rid, 'reltype': rtype, 'target': rel_target_path(new_other_name, new_name), 'is_external': False})
 
     out_pkg.add_part(new_name, data)  # rId'ы в самом XML не меняются, т.к. мы сохраняем те же Id в новых rels
     out_pkg.set_rels(new_name, new_rels)
     return new_name
 
 
-def import_slide_master(out_pkg, src_pkg, master_target, cache):
+def import_slide_master(out_pkg, src_pkg, master_target, cache, other_cache):
     if master_target in cache:
         return cache[master_target]
 
@@ -239,24 +316,23 @@ def import_slide_master(out_pkg, src_pkg, master_target, cache):
         rtarget = rel['target']
         if rtype == RELTYPE_SLIDE_LAYOUT:
             new_layout_name = import_generic_part_with_rels(
-                out_pkg, src_pkg, rtarget, 'slideLayout', {'master_new_name': new_master_name}
+                out_pkg, src_pkg, rtarget, 'slideLayout', {'master_new_name': new_master_name}, other_cache
             )
             layout_map[rtarget] = new_layout_name
             new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_layout_name, new_master_name), 'is_external': False})
         elif rtype == RELTYPE_THEME:
-            new_theme_name = import_generic_part_with_rels(out_pkg, src_pkg, rtarget, 'theme', {})
+            new_theme_name = import_generic_part_with_rels(out_pkg, src_pkg, rtarget, 'theme', {}, other_cache)
             new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_theme_name, new_master_name), 'is_external': False})
         elif rtarget.startswith('ppt/media/'):
             new_media_name = copy_media_part(out_pkg, src_pkg, rtarget, new_master_name)
             new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_media_name, new_master_name), 'is_external': False})
         else:
             try:
-                raw = src_pkg.read(rtarget)
-                new_other_name = out_pkg.alloc_name('other', posixpath.splitext(rtarget)[1])
-                out_pkg.add_part(new_other_name, raw)
-                new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_other_name, new_master_name), 'is_external': False})
+                src_pkg.read(rtarget)
             except KeyError:
                 continue
+            new_other_name = import_other_part(out_pkg, src_pkg, rtarget, rtype, other_cache)
+            new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_other_name, new_master_name), 'is_external': False})
 
     out_pkg.add_part(new_master_name, data)
     out_pkg.set_rels(new_master_name, new_rels)
@@ -264,7 +340,7 @@ def import_slide_master(out_pkg, src_pkg, master_target, cache):
     return {'new_master_name': new_master_name, 'layout_map': layout_map}
 
 
-def import_slide(out_pkg, src_pkg, slide_target, new_layout_name):
+def import_slide(out_pkg, src_pkg, slide_target, new_layout_name, other_cache):
     new_slide_name = out_pkg.alloc_name('slide', '.xml')
     data = src_pkg.read(slide_target)
     src_rels = src_pkg.get_rels(slide_target)
@@ -283,12 +359,11 @@ def import_slide(out_pkg, src_pkg, slide_target, new_layout_name):
             new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_media_name, new_slide_name), 'is_external': False})
         else:
             try:
-                raw = src_pkg.read(rtarget)
-                new_other_name = out_pkg.alloc_name('other', posixpath.splitext(rtarget)[1])
-                out_pkg.add_part(new_other_name, raw)
-                new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_other_name, new_slide_name), 'is_external': False})
+                src_pkg.read(rtarget)
             except KeyError:
                 continue
+            new_other_name = import_other_part(out_pkg, src_pkg, rtarget, rtype, other_cache)
+            new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_other_name, new_slide_name), 'is_external': False})
 
     out_pkg.add_part(new_slide_name, data)
     out_pkg.set_rels(new_slide_name, new_rels)
@@ -320,30 +395,56 @@ def get_slide_size(src_pkg):
     return '9144000', '6858000'
 
 
-def build_content_types(out_pkg, template_ct_bytes):
-    # Парсим только для чтения существующих записей; сам XML собираем вручную строкой в дефолтном
-    # namespace (без префикса) — LibreOffice/PowerPoint отказываются читать пакет, если
-    # корневой элемент записан с префиксом (xmlns:ns0="..."), что делает ET.tostring после
-    # смешивания нескольких namespace в одном дереве.
-    ct_root = ET.fromstring(template_ct_bytes)
-    existing_overrides = {el.get('PartName') for el in ct_root.findall(qn(CT_NS, 'Override'))}
-    existing_defaults = {el.get('Extension') for el in ct_root.findall(qn(CT_NS, 'Default'))}
+def build_content_types(out_pkg, template_ct_bytes_by_source):
+    """
+    template_ct_bytes_by_source: список [Content_Types].xml всех исходных файлов, из которых брались слайды.
+    ВАЖНО: мы НЕ копируем Override-записи шаблонно из шаблона (раньше так было сделано из-за
+    чего в выводе оставались "мёртвые" Override для слайдов/диаграмм, которые в итоговую сборку
+    не вошли). Вместо этого Override строим строго по фактически присутствующим в выводе частям
+    (out_pkg.parts), а Default-записи (по расширению) безопасно объединяем из всех исходников (Default не
+    привязан к конкретному файлу, лишние записи безвредны).
+    """
+    # Собираем Default-записи со всех шаблонов — безопасно и покрывает нестандартные расширения.
+    existing_defaults = {}  # extension -> content_type
+    for ct_bytes in template_ct_bytes_by_source:
+        ct_root = ET.fromstring(ct_bytes)
+        for el in ct_root.findall(qn(CT_NS, 'Default')):
+            ext = el.get('Extension')
+            if ext not in existing_defaults:
+                existing_defaults[ext] = el.get('ContentType')
+
+    existing_overrides = set()  # пусто — Override строим только из фактических частей вывода
 
     extra_defaults = []  # (extension, content_type)
     extra_overrides = []  # (partname, content_type)
 
     if 'xml' not in existing_defaults:
         extra_defaults.append(('xml', 'application/xml'))
-        existing_defaults.add('xml')
+        existing_defaults['xml'] = 'application/xml'
     if 'rels' not in existing_defaults:
         extra_defaults.append(('rels', 'application/vnd.openxmlformats-package.relationships+xml'))
-        existing_defaults.add('rels')
+        existing_defaults['rels'] = 'application/vnd.openxmlformats-package.relationships+xml'
 
     for name in out_pkg.parts:
         pn = '/' + name
         if pn in existing_overrides:
             continue
-        if name.endswith('.xml'):
+        if name.startswith('ppt/extra/'):
+            # "Прочие" части (диаграммы, встроенные объекты) — content-type определён заранее по
+            # типу relationship (см. import_other_part/note_other_part_content_type). Если для неё есть
+            # зарегистрированный Override (chart и т.п.) — используем его; иначе падаем на
+            # Default по расширению (например embedded .xlsx, который в настоящих .pptx тоже
+            # покрывается Default, а не Override).
+            explicit_ctype = out_pkg.other_part_content_types.get(name)
+            if explicit_ctype:
+                extra_overrides.append((pn, explicit_ctype))
+                existing_overrides.add(pn)
+            else:
+                ext = posixpath.splitext(name)[1].lstrip('.').lower()
+                if ext and ext not in existing_defaults and ext in {e.lstrip('.') for e in CONTENT_TYPE_BY_EXT}:
+                    extra_defaults.append((ext, CONTENT_TYPE_BY_EXT['.' + ext]))
+                    existing_defaults[ext] = CONTENT_TYPE_BY_EXT['.' + ext]
+        elif name.endswith('.xml'):
             for prefix, ctype in OVERRIDE_CT_BY_PREFIX:
                 if name.startswith(prefix):
                     extra_overrides.append((pn, ctype))
@@ -353,11 +454,13 @@ def build_content_types(out_pkg, template_ct_bytes):
             ext = posixpath.splitext(name)[1].lstrip('.').lower()
             if ext and ext not in existing_defaults and ext in {e.lstrip('.') for e in CONTENT_TYPE_BY_EXT}:
                 extra_defaults.append((ext, CONTENT_TYPE_BY_EXT['.' + ext]))
-                existing_defaults.add(ext)
+                existing_defaults[ext] = CONTENT_TYPE_BY_EXT['.' + ext]
 
-    # Сериализуем весь список заново вручную, чтобы гарантированно получить дефолтный namespace везде
-    all_defaults = [(el.get('Extension'), el.get('ContentType')) for el in ct_root.findall(qn(CT_NS, 'Default'))] + extra_defaults
-    all_overrides = [(el.get('PartName'), el.get('ContentType')) for el in ct_root.findall(qn(CT_NS, 'Override'))] + extra_overrides
+    # Сериализуем весь список заново вручную, чтобы гарантированно получить дефолтный namespace везде.
+    # all_defaults идёт из объединённого словаря шаблонов + новых записей (все уже объединены в
+    # existing_defaults выше по ключу ext, так что просто берём весь словарь целиком, без дубликатов).
+    all_defaults = list(existing_defaults.items())
+    all_overrides = list(extra_overrides)
 
     parts = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n']
     parts.append(f'<Types xmlns="{CT_NS}">')
@@ -415,6 +518,7 @@ def main():
     slide_id = 256
 
     added_masters = set()
+    other_cache = {}  # src_target -> new_name — общий кэш для "прочих" частей (диаграммы и т.п.) на весь запуск
 
     for item in items:
         src_path = item['path']
@@ -436,7 +540,7 @@ def main():
 
         cache_key = (src_path, master_target)
         if master_target and cache_key not in master_target_new_name:
-            result = import_slide_master(out_pkg, src_pkg, master_target, {})
+            result = import_slide_master(out_pkg, src_pkg, master_target, {}, other_cache)
             master_target_new_name[cache_key] = result
             added_masters.add(cache_key)
 
@@ -453,7 +557,7 @@ def main():
             # слайд без обычного master/layout (крайне редко) — пропускаем связывание с layout
             raise ValueError(f'Не удалось определить layout для слайда {idx} файла {src_path}')
 
-        new_slide_name = import_slide(out_pkg, src_pkg, slide_target, new_layout_name)
+        new_slide_name = import_slide(out_pkg, src_pkg, slide_target, new_layout_name, other_cache)
 
         new_rid = f'rId{pres_rid_counter}'
         pres_rid_counter += 1
@@ -481,8 +585,8 @@ def main():
     out_pkg.add_part('ppt/presentation.xml', ''.join(pres_xml_parts).encode('utf-8'))
     out_pkg.set_rels('ppt/presentation.xml', pres_rels)
 
-    ct_bytes = first_pkg.read('[Content_Types].xml')
-    out_pkg.parts['[Content_Types].xml'] = build_content_types(out_pkg, ct_bytes)
+    ct_bytes_by_source = [pkg.read('[Content_Types].xml') for pkg in src_pkgs.values()]
+    out_pkg.parts['[Content_Types].xml'] = build_content_types(out_pkg, ct_bytes_by_source)
 
     out_pkg.save(output_path)
     print(json.dumps({'ok': True, 'output': output_path, 'slide_count': len(items)}))
