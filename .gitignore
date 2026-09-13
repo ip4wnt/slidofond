@@ -3,4 +3,10 @@ data/uploads/
 data/renders/
 data/exports/
 data/db.sqlite
+storage/uploads/
+storage/previews/
+storage/exports/
+storage/*.db
+storage/*.db-shm
+storage/*.db-wal
 *.log
