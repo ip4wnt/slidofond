@@ -9,4 +9,7 @@ storage/exports/
 storage/*.db
 storage/*.db-shm
 storage/*.db-wal
+data/*.db
+data/*.db-shm
+data/*.db-wal
 *.log
