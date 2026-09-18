@@ -1,38 +1,109 @@
 import { h, mount } from './render.js';
-import { svgIcon } from './icons.js';
+import { svgIcon, spaceIcon, toolbarIcon } from './icons.js';
 import { renderFolderTree } from './folderTree.js';
 import { renderFileList } from './fileList.js';
 import { attachUploadZone, openFilePicker } from './upload.js';
 
-// Рендерит экран хранилища: заголовок, дерево папок слева, список файлов справа.
+// Рендерит экран хранилища («Архивный фонд»): заголовок, переключатель пространств, тулбар иконок,
+// дерево папок слева, список файлов справа.
 // Возвращает ссылки на DOM-узлы, которые нужно обновлять отдельно (folderPanelEl, filePanelEl).
 export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, fileSortBy = 'date', fileSortOrder = 'desc' }, actions) {
-  const header = h('div', { class: 'storage-header' }, [
+  const topBar = h('div', { class: 'storage-topbar' }, [
     h('button', { class: 'back-btn', onClick: actions.onBackHome, 'data-testid': 'button-storage-back' }, [
       svgIcon('back'),
       'На главную',
     ]),
     h(
       'div',
-      { class: 'spaces-row', style: 'margin:0;' },
+      { class: 'spaces-row spaces-row-compact', role: 'tablist' },
       spaces.map((space) =>
         h(
           'button',
           {
-            class: `space-pill ${space.id === activeSpaceId ? 'active' : ''}`,
+            class: `space-circle space-circle-sm ${space.id === activeSpaceId ? 'active' : ''}`,
             onClick: () => actions.onSelectSpace(space.id),
+            role: 'tab',
+            'aria-selected': space.id === activeSpaceId ? 'true' : 'false',
+            'aria-label': space.name,
+            title: space.name,
             'data-testid': `storage-space-${space.slug}`,
           },
-          [svgIcon(space.icon) || svgIcon('folder'), space.name]
+          [spaceIcon(space.icon)]
         )
       )
     ),
-    canEdit
-      ? h('button', { class: 'btn btn-primary btn-sm', onClick: () => actions.onCreateRootFolder(), 'data-testid': 'button-new-root-folder' }, [
-          svgIcon('plus'),
-          'Новая папка',
-        ])
-      : h('div'),
+  ]);
+
+  const archiveTitle = h('div', { class: 'archive-title-band' }, [h('h1', {}, 'Архивный фонд')]);
+
+  const toolbar = h('div', { class: 'archive-toolbar' }, [
+    h('div', { class: 'archive-toolbar-tools' }, [
+      canEdit &&
+        h(
+          'button',
+          {
+            class: 'icon-btn toolbar-icon-btn',
+            'aria-label': 'Новая папка',
+            title: 'Новая папка',
+            onClick: () => actions.onCreateRootFolder(),
+            'data-testid': 'button-new-root-folder',
+          },
+          [toolbarIcon('folderAdd')]
+        ),
+      canEdit &&
+        h(
+          'button',
+          {
+            class: 'icon-btn toolbar-icon-btn',
+            'aria-label': 'Переименовать',
+            title: 'Переименовать выбранную папку',
+            onClick: () => actions.onRenameSelectedFolder && actions.onRenameSelectedFolder(),
+            'data-testid': 'button-toolbar-rename',
+          },
+          [toolbarIcon('rename')]
+        ),
+      canEdit &&
+        h(
+          'button',
+          {
+            class: 'icon-btn toolbar-icon-btn',
+            'aria-label': 'Вырезать',
+            title: 'Вырезать выбранное',
+            onClick: () => actions.onCutSelected && actions.onCutSelected(),
+            'data-testid': 'button-toolbar-cut',
+          },
+          [toolbarIcon('cut')]
+        ),
+      h(
+        'button',
+        {
+          class: 'icon-btn toolbar-icon-btn',
+          'aria-label': 'Скачать',
+          title: 'Скачать выбранное',
+          onClick: () => actions.onDownloadSelected && actions.onDownloadSelected(),
+          'data-testid': 'button-toolbar-download',
+        },
+        [toolbarIcon('download')]
+      ),
+      canEdit &&
+        h(
+          'button',
+          {
+            class: 'icon-btn toolbar-icon-btn danger',
+            'aria-label': 'Удалить',
+            title: 'Удалить выбранное',
+            onClick: () => actions.onDeleteSelected && actions.onDeleteSelected(),
+            'data-testid': 'button-toolbar-delete',
+          },
+          [toolbarIcon('trash')]
+        ),
+    ]),
+    canEdit &&
+      h(
+        'button',
+        { class: 'btn btn-fund', onClick: () => openFilePicker(actions.onFilesSelected), 'data-testid': 'button-upload' },
+        [svgIcon('upload'), 'Пополнить фонд']
+      ),
   ]);
 
   const folderPanel = h('div', { class: 'folder-panel' }, [
@@ -99,17 +170,12 @@ export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, 
     h('div', { class: 'file-panel-header' }, [
       h('div', {}, [h('h2', { class: 'file-panel-title' }, ''), h('div', { class: 'file-panel-breadcrumb' })]),
       h('div', { class: 'file-panel-sort-controls' }, [sortSelect, sortDirBtn]),
-      canEdit &&
-        h('button', { class: 'btn btn-primary upload-zone-btn', onClick: () => openFilePicker(actions.onFilesSelected), 'data-testid': 'button-upload' }, [
-          svgIcon('upload'),
-          'Загрузить презентацию',
-        ]),
     ]),
     h('div', { class: 'file-list-slot' }),
   ]);
 
   const body = h('div', { class: 'storage-body' }, [folderPanel, filePanel]);
-  mount(container, h('div', { class: 'storage-view' }, [header, body]));
+  mount(container, h('div', { class: 'storage-view' }, [topBar, archiveTitle, toolbar, body]));
 
   if (canEdit) {
     attachUploadZone(filePanel, actions.onFilesSelected);

@@ -18,7 +18,7 @@ function closeAnyContextMenu() {
 
 // Рендерит дерево папок. canEdit — может ли пользователь создавать/переименовывать/удалять папки.
 // actions: { onSelect(folderId), onCreate(parentId), onRename(folderId, name), onDelete(folderId) }
-export function renderFolderTree(container, { folders, selectedFolderId, expandedIds, canEdit }, actions) {
+export function renderFolderTree(container, { folders, selectedFolderId, expandedIds, canEdit, cutFolderId }, actions) {
   const byParent = buildTree(folders);
 
   function renderNode(folder, depth) {
@@ -26,11 +26,12 @@ export function renderFolderTree(container, { folders, selectedFolderId, expande
     const hasChildren = children.length > 0;
     const isExpanded = expandedIds.has(folder.id);
     const isSelected = folder.id === selectedFolderId;
+    const isCut = folder.id === cutFolderId;
 
     const row = h(
       'div',
       {
-        class: `folder-row ${isSelected ? 'selected' : ''}`,
+        class: `folder-row ${isSelected ? 'selected' : ''} ${isCut ? 'cut' : ''}`,
         'data-testid': `folder-row-${folder.id}`,
         onClick: () => actions.onSelect(folder.id),
       },

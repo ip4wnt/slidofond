@@ -35,6 +35,7 @@ const store = createStore({
   selectedFolderId: null,
   presentations: [],
   expandedPresentationId: null,
+  cutFolderId: null,
 });
 
 // ============ THEME (system preference, no persistence needed) ============
@@ -64,19 +65,21 @@ async function bootstrap() {
 function renderAppHeader(user) {
   const header = h('header', { class: 'app-header' }, [
     h('div', { class: 'brand' }, [
-      h('span', { class: 'brand-mark', html: `<svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#1f6f4f"/><path d="M8 10h16v12H8z" fill="none" stroke="#fff" stroke-width="2"/><path d="M8 14h16" stroke="#fff" stroke-width="2"/></svg>` }),
-      'SlideVault',
+      h('img', { class: 'brand-mark', src: 'assets/logo/fpg-logo.svg', alt: 'Фонд Президентских грантов' }),
     ]),
     h('div', { class: 'header-actions' }, [
       user.role === 'admin' &&
         h('button', { class: 'icon-btn', 'aria-label': 'Управление пользователями', onClick: onOpenUsersAdmin, 'data-testid': 'button-users-admin' }, [
           svgIcon('users'),
         ]),
-      h('div', { class: 'user-chip' }, [
-        user.displayName,
-        h('span', { class: 'role-badge' }, ROLE_LABELS_RU[user.role]),
+      h('div', { class: 'auth-chip' }, [
+        h('div', { class: 'auth-chip-avatar' }, [svgIcon('users')]),
+        h('div', { class: 'auth-chip-text' }, [
+          h('span', { class: 'auth-chip-name' }, user.displayName),
+          h('span', { class: 'auth-chip-role' }, ROLE_LABELS_RU[user.role]),
+        ]),
+        h('button', { class: 'auth-chip-logout', 'aria-label': 'Выйти', onClick: onLogout, 'data-testid': 'button-logout' }, [svgIcon('logout')]),
       ]),
-      h('button', { class: 'icon-btn', 'aria-label': 'Выйти', onClick: onLogout, 'data-testid': 'button-logout' }, [svgIcon('logout')]),
     ]),
   ]);
   return header;
@@ -311,6 +314,80 @@ async function onDeleteFolder(folderId, name) {
 
 async function onCreateRootFolder() {
   await onCreateFolder(null);
+}
+
+// ============ ТУЛБАР АРХИВА: действия над выбранной папкой (логика как в проводнике) ============
+
+function currentSelectedFolder() {
+  const { folders, selectedFolderId } = store.getState();
+  return folders.find((f) => f.id === selectedFolderId) || null;
+}
+
+async function onRenameSelectedFolder() {
+  const folder = currentSelectedFolder();
+  if (!folder) return;
+  await onRenameFolder(folder.id, folder.name);
+}
+
+async function onDeleteSelected() {
+  const folder = currentSelectedFolder();
+  if (!folder) return;
+  await onDeleteFolder(folder.id, folder.name);
+}
+
+async function onCutSelected() {
+  const folder = currentSelectedFolder();
+  if (!folder) return;
+  const { cutFolderId, folders, storageSpaceId } = store.getState();
+
+  // Первый клик без активного вырезания — помечаем текущую папку как источник.
+  if (!cutFolderId) {
+    store.setState({ cutFolderId: folder.id });
+    showToast(`Папка «${folder.name}» вырезана. Выберите целевую папку и нажмите «Вырезать» ещё раз, чтобы переместить сюда.`, 'success');
+    return;
+  }
+
+  // Повторный клик на той же папке — отмена вырезания.
+  if (cutFolderId === folder.id) {
+    store.setState({ cutFolderId: null });
+    showToast('Вырезание отменено', 'success');
+    return;
+  }
+
+  // Защита от переноса в свою же подпапку (цикл) — проверяем цепочку родителей цели.
+  let cursor = folder.id;
+  while (cursor) {
+    if (cursor === cutFolderId) {
+      showToast('Нельзя переместить папку в свою же подпапку', 'error');
+      return;
+    }
+    const cursorFolder = folders.find((f) => f.id === cursor);
+    cursor = cursorFolder ? cursorFolder.parentId : null;
+  }
+
+  const movedFolder = folders.find((f) => f.id === cutFolderId);
+  try {
+    await api.updateFolder(cutFolderId, { parentId: folder.id });
+    const updatedFolders = await api.listFolders(storageSpaceId);
+    const expanded = new Set(store.getState().expandedFolderIds);
+    expanded.add(folder.id);
+    store.setState({ folders: updatedFolders, cutFolderId: null, expandedFolderIds: expanded });
+    showToast(`Папка «${movedFolder ? movedFolder.name : ''}» перемещена в «${folder.name}»`, 'success');
+  } catch (err) {
+    store.setState({ cutFolderId: null });
+    showToast(err.message, 'error');
+  }
+}
+
+async function onDownloadSelected() {
+  const folder = currentSelectedFolder();
+  if (!folder) return;
+  const { presentations } = store.getState();
+  if (presentations.length === 0) {
+    showToast('В этой папке нет презентаций для скачивания', 'error');
+    return;
+  }
+  presentations.forEach((p) => window.open(api.downloadPresentationUrl(p.id), '_blank'));
 }
 
 // Переместить папку на одну позицию вверх/вниз среди сиблингов.
@@ -564,12 +641,16 @@ function render() {
         onFilesSelected,
         onSortRootFolders,
         onChangeFileSort,
+        onRenameSelectedFolder,
+        onCutSelected,
+        onDownloadSelected,
+        onDeleteSelected,
       }
     );
 
     renderFolderTree(
       slots.folderTreeSlot,
-      { folders: state.folders, selectedFolderId: state.selectedFolderId, expandedIds: state.expandedFolderIds, canEdit },
+      { folders: state.folders, selectedFolderId: state.selectedFolderId, expandedIds: state.expandedFolderIds, canEdit, cutFolderId: state.cutFolderId },
       {
         onSelect: onSelectFolder,
         onToggleExpand: onToggleExpandFolder,

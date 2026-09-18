@@ -1,7 +1,7 @@
 import { h, mount } from './render.js';
-import { svgIcon } from './icons.js';
+import { svgIcon, spaceIcon } from './icons.js';
 
-// Рендерит главный экран: строку поиска, переключатель пространств и кнопку хранилища.
+// Рендерит главный экран: заголовок, круглые кнопки-переключатели пространств, строку поиска и кнопку хранилища.
 // Пространства — это вкладки с одинственным выбором: поиск и архив всегда ведутся только в одном активном пространстве.
 // state: { spaces, activeSpaceId, view: 'idle'|'results', query }
 // actions: { onSelectSpace, onSubmitSearch, onOpenStorage }
@@ -15,13 +15,15 @@ export function renderHome(container, state, actions) {
       h(
         'button',
         {
-          class: `space-pill ${space.id === state.activeSpaceId ? 'active' : ''}`,
+          class: `space-circle ${space.id === state.activeSpaceId ? 'active' : ''}`,
           onClick: () => actions.onSelectSpace(space.id),
           role: 'tab',
           'aria-selected': space.id === state.activeSpaceId ? 'true' : 'false',
+          'aria-label': space.name,
+          title: space.name,
           'data-testid': `space-pill-${space.slug}`,
         },
-        [svgIcon(space.icon) || svgIcon('folder'), space.name]
+        [spaceIcon(space.icon)]
       )
     )
   );
@@ -37,15 +39,16 @@ export function renderHome(container, state, actions) {
       },
     },
     [
-      svgIcon('search'),
       h('input', {
         class: 'search-input',
         type: 'text',
-        placeholder: 'Найти слайд по теме или описать нужную презентацию…',
+        placeholder: 'Здравствуйте! Чем могу Вам помочь?',
         value: state.query || '',
         'data-testid': 'input-search',
       }),
-      h('button', { class: 'btn btn-primary', type: 'submit', 'data-testid': 'button-search' }, 'Найти'),
+      h('button', { class: 'search-submit-btn', type: 'submit', 'aria-label': 'Найти', 'data-testid': 'button-search' }, [
+        svgIcon('sendArrow'),
+      ]),
     ]
   );
 
@@ -55,8 +58,7 @@ export function renderHome(container, state, actions) {
     [
       !isTop &&
         h('div', { class: 'home-intro' }, [
-          h('h1', {}, 'SlideVault'),
-          h('p', {}, 'Храните презентации, находите нужные слайды по смыслу и собирайте новые презентации из готовых материалов.'),
+          h('h1', {}, 'Центральный слайдофонд'),
         ]),
       spacesRow,
       h('div', { class: 'search-box-wrap' }, [searchForm]),

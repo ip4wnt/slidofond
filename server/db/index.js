@@ -23,6 +23,8 @@ function seedDefaults() {
     const fpg = insertSpace.run('fpg', 'ФПГ', 'landmark', 0, 1);
     insertSpace.run('education', 'Просвещение', 'book', 1, 0);
     insertSpace.run('media', 'Медиа и коммуникации', 'megaphone', 2, 0);
+    insertSpace.run('school', 'Школа', 'orbit', 3, 0);
+    insertSpace.run('cdcs', 'ЦДЦС', 'dot', 4, 0);
 
     // Для ФПГ создаём папки по годам 2017–2026
     const insertFolder = db.prepare(
@@ -32,6 +34,14 @@ function seedDefaults() {
     for (let year = 2017; year <= 2026; year++) {
       insertFolder.run(fpg.lastInsertRowid, String(year), order++);
     }
+  } else {
+    // На уже развёрнутых базах добавляем новые пространства из редизайна по макету Figma (5 кнопок-переключателей).
+    const insertSpace = db.prepare(
+      'INSERT INTO spaces (slug, name, icon, sort_order, is_default) VALUES (?, ?, ?, ?, ?)'
+    );
+    const existingSlugs = new Set(db.prepare('SELECT slug FROM spaces').all().map((s) => s.slug));
+    if (!existingSlugs.has('school')) insertSpace.run('school', 'Школа', 'orbit', 3, 0);
+    if (!existingSlugs.has('cdcs')) insertSpace.run('cdcs', 'ЦДЦС', 'dot', 4, 0);
   }
 
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;

@@ -41,31 +41,38 @@ function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
       { class: 'file-card-thumb', onClick: () => actions.onOpenGallery(p) },
       p.slideCount > 0 ? [h('img', { src: firstSlidePreview, loading: 'lazy', alt: 'Превью' })] : [svgIcon('fileText')]
     ),
-    h('div', { class: 'file-card-info' }, [
+    h('div', { class: 'file-card-body' }, [
       h('div', { class: 'file-card-title', title: p.originalFilename }, p.originalFilename),
+      p.summaryText && h('div', { class: 'file-card-summary' }, truncate(p.summaryText, 220)),
+      h(
+        'button',
+        { class: 'file-card-meta-toggle', onClick: () => actions.onToggleExpand(p.id), 'data-testid': `button-expand-${p.id}` },
+        [
+          'Метаданные',
+          (() => {
+            const el = svgIcon('chevronDown');
+            el.style.transform = isExpanded ? 'rotate(180deg)' : 'none';
+            return el;
+          })(),
+        ]
+      ),
+    ]),
+    h('div', { class: 'file-card-side' }, [
       h('div', { class: 'file-card-meta' }, [
-        h('span', {}, `Создан: ${formatDate(p.fileCreatedAt)}`),
-        h('span', {}, `Изменён: ${formatDate(p.fileModifiedAt)}`),
-        h('span', {}, `Загрузил: ${p.uploadedByName}`),
-        h('span', {}, formatBytes(p.fileSizeBytes)),
-        h('span', {}, `Слайдов: ${p.slideCount}`),
+        h('span', {}, ['Изменён: ', h('b', {}, formatDate(p.fileModifiedAt))]),
+        h('span', {}, ['Загружен: ', h('b', {}, formatDate(p.fileCreatedAt))]),
+        h('span', {}, ['Загрузил: ', h('b', {}, p.uploadedByName)]),
+        h('span', {}, h('b', {}, formatBytes(p.fileSizeBytes))),
+        h('span', {}, ['Слайдов: ', h('b', {}, p.slideCount)]),
         h('span', { class: `status-pill ${p.summaryStatus}` }, STATUS_LABELS[p.summaryStatus] || p.summaryStatus),
       ]),
-      p.summaryText && h('div', { class: 'file-card-summary' }, isExpanded ? '' : truncate(p.summaryText, 160)),
-    ]),
-    h('div', { class: 'file-card-actions' }, [
-      h('button', { class: 'icon-btn', 'aria-label': 'Развернуть описание', onClick: () => actions.onToggleExpand(p.id), 'data-testid': `button-expand-${p.id}` }, [
-        (() => {
-          const el = svgIcon('chevronDown');
-          el.style.transform = isExpanded ? 'rotate(180deg)' : 'none';
-          return el;
-        })(),
+      h('div', { class: 'file-card-actions' }, [
+        h('a', { class: 'icon-btn', href: actions.downloadUrl(p.id), 'aria-label': 'Скачать', 'data-testid': `button-download-${p.id}` }, [svgIcon('download')]),
+        canDelete &&
+          h('button', { class: 'icon-btn btn-danger', 'aria-label': 'Удалить', onClick: () => actions.onDelete(p), 'data-testid': `button-delete-${p.id}` }, [
+            svgIcon('trash'),
+          ]),
       ]),
-      h('a', { class: 'icon-btn', href: actions.downloadUrl(p.id), 'aria-label': 'Скачать', 'data-testid': `button-download-${p.id}` }, [svgIcon('download')]),
-      canDelete &&
-        h('button', { class: 'icon-btn btn-danger', 'aria-label': 'Удалить', onClick: () => actions.onDelete(p), 'data-testid': `button-delete-${p.id}` }, [
-          svgIcon('trash'),
-        ]),
     ]),
   ]);
 

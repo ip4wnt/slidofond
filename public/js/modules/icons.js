@@ -30,6 +30,7 @@ export const icon = {
   sortDesc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h12"/><path d="M3 12h9"/><path d="M3 18h6"/><path d="m17 9 3 3-3 3"/><path d="M20 9v9"/></svg>`,
   folderPlus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/><path d="M12 11v4M10 13h4"/></svg>`,
   fileMove: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5a1 1 0 0 0 1 1h5"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="m9.5 12.5 3 3 3-3"/><path d="M12.5 10v5.5"/></svg>`,
+  sendArrow: `<svg viewBox="0 0 140 122" fill="none" stroke="currentColor" stroke-width="16.0584" stroke-linecap="round" stroke-linejoin="round"><path d="M8.02912 61L131.628 61M78.6568 113.971L131.628 61L78.6568 8.02921"/></svg>`,
 };
 
 export function svgIcon(name, className = '') {
@@ -40,4 +41,41 @@ export function svgIcon(name, className = '') {
   svg.classList.add('icon');
   if (className) svg.classList.add(className);
   return svg;
+}
+
+// Иконки для круглых кнопок-переключателей пространств — фирменные ассеты из макета Figma
+// (лого ФПГ, глобус, лист/дерево, орбита-инфинити, фиолетовый круг), не универсальные stroke-иконки.
+const SPACE_ICON_ASSETS = {
+  landmark: 'assets/logo/fpg-mark.svg',
+  book: 'assets/spaces/space-globe.png',
+  megaphone: 'assets/spaces/space-leaf.png',
+  orbit: 'assets/spaces/space-orbit.png',
+  dot: 'assets/spaces/space-dot.svg',
+};
+
+export function spaceIcon(iconName, className = '') {
+  const src = SPACE_ICON_ASSETS[iconName];
+  const img = document.createElement('img');
+  img.className = `space-icon-img ${className}`.trim();
+  img.alt = '';
+  img.src = src || SPACE_ICON_ASSETS.landmark;
+  return img;
+}
+
+// Иконки тулбара архива — фирменные SVG-ассеты из макета Figma (папка+, карандаш, ножницы, стрелка вниз, корзина).
+const TOOLBAR_ICON_ASSETS = {
+  folderAdd: 'assets/icons/toolbar-folder-add.svg',
+  rename: 'assets/icons/toolbar-pencil.svg',
+  cut: 'assets/icons/toolbar-scissors.svg',
+  download: 'assets/icons/toolbar-download.svg',
+  trash: 'assets/icons/toolbar-trash.svg',
+};
+
+export function toolbarIcon(name, className = '') {
+  const src = TOOLBAR_ICON_ASSETS[name];
+  const img = document.createElement('img');
+  img.className = `toolbar-icon-img ${className}`.trim();
+  img.alt = '';
+  img.src = src;
+  return img;
 }
