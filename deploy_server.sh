@@ -19,7 +19,10 @@ else
 fi
 
 sudo apt-get install -y libreoffice python3 python3-pip nginx git
-pip3 install --user python-pptx
+
+# Ubuntu 24.04 блокирует глобальный pip install (PEP 668, "externally-managed-environment").
+# python-pptx — чисто Python-библиотека без системных зависимостей, ставим с обходом защиты.
+pip3 install --user --break-system-packages python-pptx
 
 echo "== 2. Клонирование репозитория =="
 if [ -d "$APP_DIR/.git" ]; then
