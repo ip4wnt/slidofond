@@ -69,6 +69,7 @@ function toPublic(p) {
     fileModifiedAt: p.file_modified_at,
     summaryText: p.summary_text,
     summaryStatus: p.summary_status,
+    errorMessage: p.error_message || null,
   };
 }
 
@@ -179,7 +180,10 @@ router.post('/', requireAuth, requireRole('editor'), upload.single('file'), asyn
   // Асинхронная обработка: не блокируем ответ клиенту
   processPresentationAsync(presentationId, req.file.path).catch((err) => {
     console.error(`[presentations] Ошибка обработки #${presentationId}:`, err.message);
-    db.prepare("UPDATE presentations SET summary_status = 'error' WHERE id = ?").run(presentationId);
+    db.prepare("UPDATE presentations SET summary_status = 'error', error_message = ? WHERE id = ?").run(
+      err.message || 'Неизвестная ошибка при анализе файла',
+      presentationId
+    );
   });
 });
 
@@ -212,6 +216,9 @@ async function processPresentationAsync(presentationId, filePath) {
   // Рендерим превью слайдов в JPEG (может занять время для больших презентаций).
   // LibreOffice headless иногда падает с первой попытки (блокировка профиля при
   // параллельном запуске) — при ошибке пробуем ещё раз перед тем как сдаться.
+  // Если и вторая попытка не удалась — анализ текста и описания всё равно готовы, но статус
+  // переводим в 'error' с понятным сообщением о причине — чтобы отсутствие превью не оставалось
+  // незамеченным для пользователя.
   try {
     await renderPreviews(presentationId, filePath);
   } catch (err) {
@@ -220,6 +227,10 @@ async function processPresentationAsync(presentationId, filePath) {
       await renderPreviews(presentationId, filePath);
     } catch (err2) {
       console.error(`[presentations] Ошибка рендеринга превью #${presentationId} (попытка 2):`, err2.message);
+      db.prepare("UPDATE presentations SET summary_status = 'error', error_message = ? WHERE id = ?").run(
+        `Не удалось создать превью слайдов: ${err2.message}`,
+        presentationId
+      );
     }
   }
 }

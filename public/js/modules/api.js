@@ -70,6 +70,36 @@ export const api = {
     request('GET', `/api/presentations?folderId=${folderId}${sortBy ? `&sortBy=${sortBy}` : ''}${sortOrder ? `&sortOrder=${sortOrder}` : ''}`),
   getPresentation: (id) => request('GET', `/api/presentations/${id}`),
   uploadPresentation: (formData) => request('POST', '/api/presentations', formData),
+  // Загрузка с отслеживанием прогресса передачи байтов — fetch не даёт событий upload progress,
+  // поэтому здесь отдельно XMLHttpRequest. onProgress(fraction 0..1) вызывается по ходу загрузки.
+  uploadPresentationWithProgress: (formData, onProgress) =>
+    new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', apiBase() + '/api/presentations');
+      xhr.withCredentials = true;
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+      });
+      xhr.addEventListener('load', () => {
+        let data = null;
+        try {
+          data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+        } catch {
+          data = null;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          const message = (data && data.error) || `Ошибка запроса (${xhr.status})`;
+          const err = new Error(message);
+          err.status = xhr.status;
+          reject(err);
+        }
+      });
+      xhr.addEventListener('error', () => reject(new Error('Сетевая ошибка при загрузке')));
+      xhr.addEventListener('abort', () => reject(new Error('Загрузка отменена')));
+      xhr.send(formData);
+    }),
   updateSummary: (id, summaryText) => request('PATCH', `/api/presentations/${id}/summary`, { summaryText }),
   movePresentation: (id, folderId) => request('PATCH', `/api/presentations/${id}/move`, { folderId }),
   deletePresentation: (id) => request('DELETE', `/api/presentations/${id}`),

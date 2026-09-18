@@ -5,10 +5,16 @@ import { formatBytes, formatDate, formatDateTime } from './format.js';
 const STATUS_LABELS = { pending: 'В очереди', processing: 'Анализ…', done: 'Готово', error: 'Ошибка анализа' };
 
 // Рендерит список презентаций в текущей папке.
-// presentations: [{...}], expandedId: id | null, currentUser: {id, role}
-// actions: { onToggleExpand, onDownload, onDelete, onOpenGallery, onSaveSummary, onSaveSlideDescription, onUploadClick }
-export function renderFileList(container, { presentations, expandedId, currentUser, canEdit }, actions) {
+// presentations: [{...}], uploads: [{localId, fileName, progress, phase, errorMessage}], expandedId: id | null, currentUser: {id, role}
+// actions: { onToggleExpand, onDownload, onDelete, onOpenGallery, onSaveSummary, onSaveSlideDescription, onUploadClick, onDismissUpload }
+export function renderFileList(container, { presentations, uploads, expandedId, currentUser, canEdit }, actions) {
+  const uploadCards = (uploads || []).map((u) => renderUploadCard(u, actions));
+
   if (presentations.length === 0) {
+    if (uploadCards.length > 0) {
+      container.replaceChildren(h('div', { class: 'file-list' }, uploadCards));
+      return;
+    }
     container.replaceChildren(
       h('div', { class: 'empty-state' }, [
         svgIcon('fileText'),
@@ -23,12 +29,44 @@ export function renderFileList(container, { presentations, expandedId, currentUs
     return;
   }
 
-  const list = h(
-    'div',
-    { class: 'file-list' },
-    presentations.map((p) => renderFileCard(p, expandedId === p.id, currentUser, canEdit, actions))
-  );
+  const list = h('div', { class: 'file-list' }, [
+    ...uploadCards,
+    ...presentations.map((p) => renderFileCard(p, expandedId === p.id, currentUser, canEdit, actions)),
+  ]);
   container.replaceChildren(list);
+}
+
+const UPLOAD_PHASE_LABELS = {
+  uploading: 'Загрузка…',
+  processing: 'Анализ…',
+  error: 'Ошибка',
+};
+
+function renderUploadCard(u, actions) {
+  const percent = Math.round((u.progress || 0) * 100);
+  const isError = u.phase === 'error';
+
+  return h('div', { class: `upload-card${isError ? ' upload-card-error' : ''}`, 'data-testid': `upload-card-${u.localId}` }, [
+    h('div', { class: 'upload-card-icon' }, [svgIcon(isError ? 'alertCircle' : 'fileText')]),
+    h('div', { class: 'upload-card-body' }, [
+      h('div', { class: 'upload-card-title', title: u.fileName }, u.fileName),
+      isError
+        ? h('div', { class: 'upload-card-error-text' }, u.errorMessage || 'Не удалось загрузить файл')
+        : h('div', { class: 'upload-card-progress-row' }, [
+            h('div', { class: 'upload-card-progress-track' }, [
+              h('div', {
+                class: 'upload-card-progress-fill',
+                style: `width:${u.phase === 'processing' ? 100 : percent}%`,
+              }),
+            ]),
+            h('span', { class: 'upload-card-phase' }, u.phase === 'uploading' ? `${UPLOAD_PHASE_LABELS.uploading} ${percent}%` : UPLOAD_PHASE_LABELS.processing),
+          ]),
+    ]),
+    isError &&
+      h('button', { class: 'icon-btn', 'aria-label': 'Скрыть', onClick: () => actions.onDismissUpload(u.localId), 'data-testid': `button-dismiss-upload-${u.localId}` }, [
+        svgIcon('x') ,
+      ]),
+  ]);
 }
 
 function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
@@ -64,7 +102,14 @@ function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
         h('span', {}, ['Загрузил: ', h('b', {}, p.uploadedByName)]),
         h('span', {}, h('b', {}, formatBytes(p.fileSizeBytes))),
         h('span', {}, ['Слайдов: ', h('b', {}, p.slideCount)]),
-        h('span', { class: `status-pill ${p.summaryStatus}` }, STATUS_LABELS[p.summaryStatus] || p.summaryStatus),
+        h(
+          'span',
+          {
+            class: `status-pill ${p.summaryStatus}`,
+            title: p.summaryStatus === 'error' && p.errorMessage ? p.errorMessage : undefined,
+          },
+          STATUS_LABELS[p.summaryStatus] || p.summaryStatus
+        ),
       ]),
       h('div', { class: 'file-card-actions' }, [
         h('a', { class: 'icon-btn', href: actions.downloadUrl(p.id), 'aria-label': 'Скачать', 'data-testid': `button-download-${p.id}` }, [svgIcon('download')]),

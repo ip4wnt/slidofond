@@ -47,6 +47,7 @@ function ensureSchema(db) {
       file_modified_at TEXT,
       summary_text TEXT NOT NULL DEFAULT '',
       summary_status TEXT NOT NULL DEFAULT 'pending' CHECK(summary_status IN ('pending','processing','done','error')),
+      error_message TEXT,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','deleted'))
     );
 
@@ -99,6 +100,12 @@ function ensureSchema(db) {
       VALUES (new.id, new.title, new.text_content, new.description);
     END;
   `);
+
+  // Миграция для уже существующих БД без колонки error_message (добавлена после первоначального релиза).
+  const presentationColumns = db.prepare("PRAGMA table_info(presentations)").all().map((c) => c.name);
+  if (!presentationColumns.includes('error_message')) {
+    db.exec('ALTER TABLE presentations ADD COLUMN error_message TEXT');
+  }
 }
 
 module.exports = { ensureSchema };

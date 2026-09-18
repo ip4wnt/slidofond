@@ -36,6 +36,11 @@ const store = createStore({
   presentations: [],
   expandedPresentationId: null,
   cutFolderId: null,
+
+  // Активные загрузки в этой папке: [{ localId, fileName, progress, phase, errorMessage }]
+  // phase: 'uploading' | 'processing' | 'error'. Успешные завершённые загрузки убираются из списка,
+  // когда презентация переходит в summaryStatus 'done' в общем списке presentations.
+  uploads: [],
 });
 
 // ============ THEME (system preference, no persistence needed) ============
@@ -254,6 +259,8 @@ async function onChangeFileSort(sortBy, sortOrder) {
 }
 
 function onSelectFolder(folderId) {
+  // При переходе в другую папку карточки активных загрузок из прежней папки больше не относятся сюда.
+  store.setState({ uploads: [] });
   loadPresentations(folderId);
 }
 
@@ -430,42 +437,98 @@ function onSelectStorageSpace(spaceId) {
   loadStorageSpace(spaceId);
 }
 
+let uploadCounter = 0;
+
+function patchUpload(localId, patch) {
+  const { uploads } = store.getState();
+  store.setState({ uploads: uploads.map((u) => (u.localId === localId ? { ...u, ...patch } : u)) });
+}
+
+function removeUpload(localId) {
+  const { uploads } = store.getState();
+  store.setState({ uploads: uploads.filter((u) => u.localId !== localId) });
+}
+
 async function onFilesSelected(fileList) {
   const { selectedFolderId, storageSpaceId } = store.getState();
   if (!selectedFolderId) {
     showToast('Сначала выберите папку для загрузки', 'error');
     return;
   }
-  for (const file of Array.from(fileList)) {
+
+  const files = Array.from(fileList);
+  // Заводим видимые карточки загрузки сразу для всех файлов, чтобы пользователь сразу видел прогресс,
+  // а не тишину до момента ответа сервера.
+  const entries = files.map((file) => ({
+    localId: `upload-${++uploadCounter}`,
+    file,
+    fileName: file.name,
+    progress: 0,
+    phase: 'uploading', // uploading | processing | error
+    errorMessage: null,
+  }));
+  store.setState({ uploads: [...store.getState().uploads, ...entries.map(({ file, ...rest }) => rest)] });
+
+  // Файлы загружаются последовательно (проще для бэкенда и понятнее по прогрессу),
+  // но каждый файл сразу показывает свой собственный прогресс.
+  for (const entry of entries) {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', entry.file);
     formData.append('folderId', selectedFolderId);
     formData.append('spaceId', storageSpaceId);
     try {
-      await api.uploadPresentation(formData);
-      showToast(`Файл «${file.name}» загружен, идёт анализ содержимого…`, 'success');
+      await api.uploadPresentationWithProgress(formData, (fraction) => {
+        patchUpload(entry.localId, { progress: fraction });
+      });
+      // Загрузка байтов завершена — теперь сервер анализирует файл. Карточка остаётся
+      // в состоянии «processing» до тех пор, пока опрос не подтвердит статус done/error.
+      patchUpload(entry.localId, { phase: 'processing', progress: 1 });
     } catch (err) {
-      showToast(`Не удалось загрузить «${file.name}»: ${err.message}`, 'error');
+      patchUpload(entry.localId, { phase: 'error', errorMessage: err.message });
+      showToast(`Не удалось загрузить «${entry.fileName}»: ${err.message}`, 'error');
     }
   }
+
   await loadPresentations(selectedFolderId);
+  reconcileUploadsWithPresentations();
   pollProcessingPresentations();
 }
 
-// Периодически обновляет список, пока есть презентации в статусе processing/pending
+// Периодически обновляет список, пока есть презентации в статусе processing/pending или активные карточки загрузки.
+// Когда презентация из uploads появляется в общем списке с итоговым статусом — убираем её карточку прогресса,
+// чтобы она не дублировала карточку в общем списке презентаций.
 let pollTimer = null;
 function pollProcessingPresentations() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
-    const { presentations, selectedFolderId, screen } = store.getState();
+    const { presentations, selectedFolderId, screen, uploads } = store.getState();
     const stillProcessing = presentations.some((p) => p.summaryStatus === 'processing' || p.summaryStatus === 'pending');
-    if (!stillProcessing || screen !== 'storage') {
+    const stillUploading = uploads.some((u) => u.phase === 'processing');
+    if ((!stillProcessing && !stillUploading) || screen !== 'storage') {
       clearInterval(pollTimer);
       pollTimer = null;
       return;
     }
     await loadPresentations(selectedFolderId);
+    reconcileUploadsWithPresentations();
   }, 3000);
+}
+
+// Убирает из uploads те загрузки, чьи файлы уже появились в общем списке с финальным статусом (done/error).
+// Сопоставляем по имени файла, т.к. локальная карточка не знает presentationId до завершения анализа.
+function reconcileUploadsWithPresentations() {
+  const { presentations, uploads } = store.getState();
+  if (uploads.length === 0) return;
+  const stillPending = uploads.filter((u) => {
+    if (u.phase !== 'processing') return true;
+    const match = presentations.find(
+      (p) => p.originalFilename === u.fileName && (p.summaryStatus === 'done' || p.summaryStatus === 'error')
+    );
+    return !match;
+  });
+  if (stillPending.length !== uploads.length) {
+    store.setState({ uploads: stillPending });
+  }
 }
 
 function onToggleExpandPresentation(id) {
@@ -673,7 +736,7 @@ function render() {
 
     renderFileList(
       slots.fileListSlot,
-      { presentations: state.presentations, expandedId: state.expandedPresentationId, currentUser: state.user, canEdit },
+      { presentations: state.presentations, uploads: state.uploads, expandedId: state.expandedPresentationId, currentUser: state.user, canEdit },
       {
         onToggleExpand: onToggleExpandPresentation,
         onDownload: (id) => window.open(api.downloadPresentationUrl(id), '_blank'),
@@ -683,6 +746,7 @@ function render() {
         onSaveSummary,
         onSaveSlideDescription,
         onUploadClick: () => openFilePicker(onFilesSelected),
+        onDismissUpload: removeUpload,
       }
     );
     return;
