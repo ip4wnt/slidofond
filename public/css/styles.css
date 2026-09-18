@@ -340,6 +340,9 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; text-wrap: 
 }
 .folder-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); padding: 0 var(--space-2); }
 .folder-panel-header h3 { font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); }
+.folder-panel-tools { display: flex; align-items: center; gap: 2px; }
+.folder-panel-tools .icon-btn { width: 30px; height: 30px; }
+.folder-panel-tools .icon-btn svg, .folder-panel-tools .icon-btn .icon { width: 16px; height: 16px; }
 
 .folder-tree { display: flex; flex-direction: column; gap: 1px; }
 .folder-node { display: flex; flex-direction: column; }
@@ -387,6 +390,13 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; text-wrap: 
 }
 .file-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); flex-wrap: wrap; gap: var(--space-3); }
 .file-panel-header h2 { font-size: var(--text-lg); }
+.file-panel-sort-controls { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.file-sort-select {
+  height: 36px; padding: 0 var(--space-2); border-radius: var(--radius-md);
+  border: 1px solid var(--color-border); background: var(--color-surface);
+  color: var(--color-text); font-size: var(--text-sm); cursor: pointer;
+}
+.file-panel-sort-controls .icon-btn { width: 36px; height: 36px; border: 1px solid var(--color-border); }
 .file-panel-breadcrumb { color: var(--color-text-muted); font-size: var(--text-sm); }
 
 .file-list { display: flex; flex-direction: column; gap: var(--space-3); }

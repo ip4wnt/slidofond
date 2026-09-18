@@ -28,6 +28,8 @@ const store = createStore({
 
   // storage screen
   storageSpaceId: null,
+  fileSortBy: 'date',
+  fileSortOrder: 'desc',
   folders: [],
   expandedFolderIds: new Set(),
   selectedFolderId: null,
@@ -233,11 +235,19 @@ async function loadStorageSpace(spaceId) {
 
 async function loadPresentations(folderId) {
   try {
-    const presentations = await api.listPresentations(folderId);
+    const { fileSortBy, fileSortOrder } = store.getState();
+    const presentations = await api.listPresentations(folderId, fileSortBy, fileSortOrder);
     store.setState({ presentations, selectedFolderId: folderId, expandedPresentationId: null });
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+// Смена порядка сортировки файлов в текущей папке — перезагружаем список с новыми параметрами.
+async function onChangeFileSort(sortBy, sortOrder) {
+  store.setState({ fileSortBy: sortBy, fileSortOrder: sortOrder });
+  const { selectedFolderId } = store.getState();
+  if (selectedFolderId) await loadPresentations(selectedFolderId);
 }
 
 function onSelectFolder(folderId) {
@@ -301,6 +311,42 @@ async function onDeleteFolder(folderId, name) {
 
 async function onCreateRootFolder() {
   await onCreateFolder(null);
+}
+
+// Переместить папку на одну позицию вверх/вниз среди сиблингов.
+async function onMoveFolder(folderId, direction) {
+  try {
+    await api.reorderFolder(folderId, direction);
+    const folders = await api.listFolders(store.getState().storageSpaceId);
+    store.setState({ folders });
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function onMoveFolderUp(folderId) {
+  return onMoveFolder(folderId, 'up');
+}
+
+function onMoveFolderDown(folderId) {
+  return onMoveFolder(folderId, 'down');
+}
+
+// Отсортировать все подпапки внутри заданной папки по алфавиту (asc/desc).
+async function onSortFolderChildren(parentId, order) {
+  try {
+    const { storageSpaceId } = store.getState();
+    await api.sortFolders(storageSpaceId, parentId, order);
+    const folders = await api.listFolders(storageSpaceId);
+    store.setState({ folders });
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Отсортировать корневые папки пространства (без родителя) по алфавиту.
+async function onSortRootFolders(order) {
+  await onSortFolderChildren(null, order);
 }
 
 function onSelectStorageSpace(spaceId) {
@@ -510,12 +556,14 @@ function render() {
     const canEdit = state.user.role === 'editor' || state.user.role === 'admin';
     const slots = renderStorageShell(
       bodyContainer,
-      { spaces: state.spaces, activeSpaceId: state.storageSpaceId, canEdit },
+      { spaces: state.spaces, activeSpaceId: state.storageSpaceId, canEdit, fileSortBy: state.fileSortBy, fileSortOrder: state.fileSortOrder },
       {
         onBackHome: onStorageBackHome,
         onSelectSpace: onSelectStorageSpace,
         onCreateRootFolder,
         onFilesSelected,
+        onSortRootFolders,
+        onChangeFileSort,
       }
     );
 
@@ -528,6 +576,9 @@ function render() {
         onCreate: onCreateFolder,
         onRename: onRenameFolder,
         onDelete: onDeleteFolder,
+        onMoveUp: onMoveFolderUp,
+        onMoveDown: onMoveFolderDown,
+        onSortChildren: onSortFolderChildren,
       }
     );
 

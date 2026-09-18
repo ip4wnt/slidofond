@@ -62,9 +62,12 @@ export const api = {
   createFolder: (data) => request('POST', '/api/folders', data),
   updateFolder: (id, data) => request('PATCH', `/api/folders/${id}`, data),
   deleteFolder: (id) => request('DELETE', `/api/folders/${id}`),
+  reorderFolder: (id, direction) => request('POST', `/api/folders/${id}/reorder`, { direction }),
+  sortFolders: (spaceId, parentId, order) => request('POST', '/api/folders/sort', { spaceId, parentId, order }),
 
   // presentations
-  listPresentations: (folderId) => request('GET', `/api/presentations?folderId=${folderId}`),
+  listPresentations: (folderId, sortBy, sortOrder) =>
+    request('GET', `/api/presentations?folderId=${folderId}${sortBy ? `&sortBy=${sortBy}` : ''}${sortOrder ? `&sortOrder=${sortOrder}` : ''}`),
   getPresentation: (id) => request('GET', `/api/presentations/${id}`),
   uploadPresentation: (formData) => request('POST', '/api/presentations', formData),
   updateSummary: (id, summaryText) => request('PATCH', `/api/presentations/${id}/summary`, { summaryText }),

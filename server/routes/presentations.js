@@ -84,12 +84,21 @@ function slideToPublic(s) {
   };
 }
 
-// Список презентаций в папке
+// Карта допустимых полей сортировки списка презентаций в папке
+const PRESENTATION_SORT_COLUMNS = {
+  name: 'original_filename COLLATE NOCASE',
+  date: 'uploaded_at',
+  size: 'file_size_bytes',
+};
+
+// Список презентаций в папке. Поддерживает sortBy=name|date|size и sortOrder=asc|desc (по умолчанию — дата загрузки, убывание).
 router.get('/', requireAuth, (req, res) => {
   const folderId = Number(req.query.folderId);
   if (!folderId) return res.status(400).json({ error: 'Укажите folderId' });
+  const sortColumn = PRESENTATION_SORT_COLUMNS[req.query.sortBy] || 'uploaded_at';
+  const sortDir = req.query.sortOrder === 'asc' ? 'ASC' : req.query.sortOrder === 'desc' ? 'DESC' : (req.query.sortBy ? 'ASC' : 'DESC');
   const rows = db
-    .prepare("SELECT * FROM presentations WHERE folder_id = ? AND status = 'active' ORDER BY uploaded_at DESC")
+    .prepare(`SELECT * FROM presentations WHERE folder_id = ? AND status = 'active' ORDER BY ${sortColumn} ${sortDir}`)
     .all(folderId);
   res.json(rows.map(toPublic));
 });

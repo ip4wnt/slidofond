@@ -115,6 +115,46 @@ function openFolderContextMenu(anchorEl, folder, actions) {
     h(
       'button',
       {
+        onClick: () => {
+          closeAnyContextMenu();
+          actions.onMoveUp(folder.id);
+        },
+      },
+      [svgIcon('arrowUp'), 'Переместить выше']
+    ),
+    h(
+      'button',
+      {
+        onClick: () => {
+          closeAnyContextMenu();
+          actions.onMoveDown(folder.id);
+        },
+      },
+      [svgIcon('arrowDown'), 'Переместить ниже']
+    ),
+    h(
+      'button',
+      {
+        onClick: () => {
+          closeAnyContextMenu();
+          actions.onSortChildren(folder.id, 'asc');
+        },
+      },
+      [svgIcon('sortAsc'), 'Содержимое: А→Я']
+    ),
+    h(
+      'button',
+      {
+        onClick: () => {
+          closeAnyContextMenu();
+          actions.onSortChildren(folder.id, 'desc');
+        },
+      },
+      [svgIcon('sortDesc'), 'Содержимое: Я→А']
+    ),
+    h(
+      'button',
+      {
         class: 'danger',
         onClick: () => {
           closeAnyContextMenu();
