@@ -98,7 +98,7 @@ function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
     h('div', { class: 'file-card-side' }, [
       h('div', { class: 'file-card-meta' }, [
         h('span', {}, ['Изменён: ', h('b', {}, formatDate(p.fileModifiedAt))]),
-        h('span', {}, ['Загружен: ', h('b', {}, formatDate(p.fileCreatedAt))]),
+        h('span', {}, ['Загружен: ', h('b', {}, formatDate(p.uploadedAt))]),
         h('span', {}, ['Загрузил: ', h('b', {}, p.uploadedByName)]),
         h('span', {}, h('b', {}, formatBytes(p.fileSizeBytes))),
         h('span', {}, ['Слайдов: ', h('b', {}, p.slideCount)]),
