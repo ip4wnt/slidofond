@@ -39,7 +39,12 @@ function seedDefaults() {
     const hash = bcrypt.hashSync('admin', 10);
     db.prepare(
       'INSERT INTO users (login, password_hash, display_name, role) VALUES (?, ?, ?, ?)'
-    ).run('admin', hash, 'Администратор', 'admin');
+    ).run('admin', hash, 'Илья Панкратов', 'admin');
+  } else {
+    // На уже развёрнутых базах меняем старое отображаемое имя администратора на актуальное.
+    db.prepare(
+      "UPDATE users SET display_name = 'Илья Панкратов' WHERE login = 'admin' AND display_name = 'Администратор'"
+    ).run();
   }
 }
 

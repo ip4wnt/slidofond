@@ -18,10 +18,12 @@ const store = createStore({
   screen: 'loading', // loading | login | home | storage
   user: null,
   spaces: [],
-  selectedSpaceIds: [],
+  activeSpaceId: null, // единственное активное пространство — поиск и архив всегда ведутся в одном пространстве
   homeView: 'idle', // idle | loading | search-results | build-result
   query: '',
+  searchIntent: 'slide', // slide | presentation — что именно искал пользователь по последнему запросу
   searchResults: [],
+  presentationResults: [],
   buildResult: null,
 
   // storage screen
@@ -49,7 +51,7 @@ async function bootstrap() {
       screen: 'home',
       user,
       spaces,
-      selectedSpaceIds: defaultSpace ? [defaultSpace.id] : [],
+      activeSpaceId: defaultSpace ? defaultSpace.id : null,
     });
   } catch (err) {
     store.setState({ screen: 'login' });
@@ -91,7 +93,7 @@ async function onLoginSubmit(login, password) {
       screen: 'home',
       user,
       spaces,
-      selectedSpaceIds: defaultSpace ? [defaultSpace.id] : [],
+      activeSpaceId: defaultSpace ? defaultSpace.id : null,
       loginPending: false,
       loginError: null,
     });
@@ -106,31 +108,25 @@ async function onLogout() {
 }
 
 // ============ HOME / SEARCH ============
-function onToggleSpace(spaceId) {
-  const { selectedSpaceIds } = store.getState();
-  let next;
-  if (selectedSpaceIds.includes(spaceId)) {
-    next = selectedSpaceIds.filter((id) => id !== spaceId);
-    if (next.length === 0) next = [spaceId]; // всегда хотя бы одно выбрано
-  } else {
-    next = [...selectedSpaceIds, spaceId];
-  }
-  store.setState({ selectedSpaceIds: next });
+// Пространства теперь работают как переключатель вкладок (одно активное пространство), а не
+// как множественный фильтр: поиск и архив ведутся только в одном конкретном пространстве.
+function onSelectSpace(spaceId) {
+  store.setState({ activeSpaceId: spaceId, homeView: 'idle', query: '', searchResults: [], presentationResults: [], buildResult: null });
 }
 
 async function onSubmitSearch(query) {
   if (!query) return;
   store.setState({ query, homeView: 'loading' });
 
-  const { selectedSpaceIds } = store.getState();
+  const { activeSpaceId } = store.getState();
 
   if (isBuildRequest(query)) {
     try {
-      const searchData = await api.search(query, selectedSpaceIds);
+      const searchData = await api.search(query, activeSpaceId);
       const slides = searchData.slides;
       if (slides.length === 0) {
         showToast('Не найдено слайдов по вашему запросу', 'error');
-        store.setState({ homeView: 'search-results', searchResults: [] });
+        store.setState({ homeView: 'search-results', searchResults: [], presentationResults: [], searchIntent: 'slide' });
         return;
       }
       const built = await api.buildPresentation(
@@ -152,8 +148,13 @@ async function onSubmitSearch(query) {
     }
   } else {
     try {
-      const data = await api.search(query, selectedSpaceIds);
-      store.setState({ homeView: 'search-results', searchResults: data.slides });
+      const data = await api.search(query, activeSpaceId);
+      store.setState({
+        homeView: 'search-results',
+        searchResults: data.slides || [],
+        presentationResults: data.presentations || [],
+        searchIntent: data.intent || 'slide',
+      });
     } catch (err) {
       showToast(err.message, 'error');
       store.setState({ homeView: 'idle' });
@@ -162,12 +163,12 @@ async function onSubmitSearch(query) {
 }
 
 function onBackHome() {
-  store.setState({ homeView: 'idle', query: '', searchResults: [], buildResult: null });
+  store.setState({ homeView: 'idle', query: '', searchResults: [], presentationResults: [], buildResult: null });
 }
 
 function onOpenStorage() {
-  const { selectedSpaceIds, spaces } = store.getState();
-  const spaceId = selectedSpaceIds[0] || (spaces[0] && spaces[0].id);
+  const { activeSpaceId, spaces } = store.getState();
+  const spaceId = activeSpaceId || (spaces[0] && spaces[0].id);
   store.setState({ screen: 'storage' });
   loadStorageSpace(spaceId);
 }
@@ -178,6 +179,16 @@ function onStorageBackHome() {
 
 async function onPreviewSlide(slide) {
   openGallery([{ previewUrl: slide.previewUrl, title: slide.title, description: slide.description }], 0);
+}
+
+// Открывает галерею для карточки-презентации из результатов поиска (там поле называется presentationId, а не id).
+async function onOpenPresentationFromSearch(presentation) {
+  await onOpenGalleryForPresentation({ id: presentation.presentationId });
+}
+
+// Скачивает всю найденную презентацию целиком (исходный файл, как и в архиве).
+function onDownloadPresentationFromSearch(presentation) {
+  window.open(api.downloadPresentationUrl(presentation.presentationId), '_blank');
 }
 
 async function onCopySlide(slide) {
@@ -472,14 +483,18 @@ function render() {
 
     const resultsSlot = renderHome(
       bodyContainer,
-      { spaces: state.spaces, selectedSpaceIds: state.selectedSpaceIds, view: state.homeView, query: state.query },
-      { onToggleSpace, onSubmitSearch, onOpenStorage }
+      { spaces: state.spaces, activeSpaceId: state.activeSpaceId, view: state.homeView, query: state.query },
+      { onSelectSpace, onSubmitSearch, onOpenStorage }
     );
 
     if (state.homeView === 'loading') {
       renderLoading(resultsSlot);
     } else if (state.homeView === 'search-results') {
-      renderSearchResults(resultsSlot, { query: state.query, slides: state.searchResults }, { onBackHome, onPreviewSlide, onCopySlide });
+      renderSearchResults(
+        resultsSlot,
+        { query: state.query, intent: state.searchIntent, slides: state.searchResults, presentations: state.presentationResults },
+        { onBackHome, onPreviewSlide, onCopySlide, onOpenPresentation: onOpenPresentationFromSearch, onDownloadPresentation: onDownloadPresentationFromSearch }
+      );
     } else if (state.homeView === 'build-result') {
       renderBuildResult(resultsSlot, state.buildResult, { onBackHome });
     }

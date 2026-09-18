@@ -75,8 +75,8 @@ export const api = {
   // slides
   updateSlide: (id, data) => request('PATCH', `/api/slides/${id}`, data),
 
-  // search
-  search: (q, spaceIds) => request('GET', `/api/search?q=${encodeURIComponent(q)}&spaces=${spaceIds.join(',')}`),
+  // search — поиск всегда в одном активном пространстве
+  search: (q, spaceId) => request('GET', `/api/search?q=${encodeURIComponent(q)}${spaceId ? `&spaceId=${spaceId}` : ''}`),
 
   // build
   buildPresentation: (slideIds, queryText) => request('POST', '/api/build', { slideIds, queryText }),

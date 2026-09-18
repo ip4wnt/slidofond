@@ -16,16 +16,19 @@ export function renderLoading(slot, label = 'Ищем подходящие сл�
   mount(slot, h('div', { class: 'loading-row' }, [h('div', { class: 'spinner' }), label]));
 }
 
-export function renderSearchResults(slot, { query, slides }, actions) {
+export function renderSearchResults(slot, { query, intent, slides, presentations }, actions) {
+  const items = intent === 'presentation' ? presentations || [] : slides || [];
+  const countLabel = intent === 'presentation' ? `Найдено презентаций: ${items.length}` : `Найдено слайдов: ${items.length}`;
+
   const header = h('div', { class: 'results-header' }, [
     h('button', { class: 'back-btn', onClick: actions.onBackHome, 'data-testid': 'button-back-home' }, [
       svgIcon('back'),
       'На главную',
     ]),
-    h('div', { class: 'results-meta' }, `Найдено слайдов: ${slides.length}`),
+    h('div', { class: 'results-meta' }, countLabel),
   ]);
 
-  if (slides.length === 0) {
+  if (items.length === 0) {
     mount(
       slot,
       h('div', {}, [
@@ -39,7 +42,16 @@ export function renderSearchResults(slot, { query, slides }, actions) {
     return;
   }
 
-  const grid = h(
+  const grid =
+    intent === 'presentation'
+      ? renderPresentationGrid(items, actions)
+      : renderSlideGrid(items, actions);
+
+  mount(slot, h('div', {}, [header, grid]));
+}
+
+function renderSlideGrid(slides, actions) {
+  return h(
     'div',
     { class: 'slide-grid' },
     slides.map((slide) =>
@@ -68,8 +80,40 @@ export function renderSearchResults(slot, { query, slides }, actions) {
       ])
     )
   );
+}
 
-  mount(slot, h('div', {}, [header, grid]));
+// Карточки для результатов типа "презентация" (когда пользователь искал всю презентацию, а не слайд).
+function renderPresentationGrid(presentations, actions) {
+  return h(
+    'div',
+    { class: 'slide-grid' },
+    presentations.map((p) =>
+      h('div', { class: 'slide-card', 'data-testid': `card-presentation-${p.presentationId}` }, [
+        h(
+          'div',
+          { class: 'slide-thumb', onClick: () => actions.onOpenPresentation(p) },
+          [h('img', { src: p.previewUrl, loading: 'lazy', alt: p.originalFilename || 'Превью презентации' })]
+        ),
+        h('div', { class: 'slide-card-body' }, [
+          h('div', { class: 'slide-card-title' }, p.originalFilename || 'Без названия'),
+          h('div', { class: 'slide-card-desc' }, p.summaryText || ''),
+          h('div', { class: 'slide-card-source' }, `Слайдов: ${p.slideCount || 0}`),
+        ]),
+        h('div', { class: 'slide-card-actions' }, [
+          h(
+            'button',
+            { class: 'btn btn-secondary btn-sm', onClick: () => actions.onOpenPresentation(p), 'data-testid': `button-view-${p.presentationId}` },
+            [svgIcon('search'), 'Просмотреть']
+          ),
+          h(
+            'button',
+            { class: 'btn btn-primary btn-sm', onClick: () => actions.onDownloadPresentation(p), 'data-testid': `button-download-${p.presentationId}` },
+            [svgIcon('download'), 'Скачать']
+          ),
+        ]),
+      ])
+    )
+  );
 }
 
 export function renderBuildResult(slot, { query, downloadUrl, slideCount, expiresAt }, actions) {
