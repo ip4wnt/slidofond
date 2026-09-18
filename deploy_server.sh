@@ -9,7 +9,16 @@ PORT="8000"
 
 echo "== 1. Системные зависимости =="
 sudo apt-get update
-sudo apt-get install -y nodejs npm libreoffice python3 python3-pip nginx git
+
+# Node.js ставим отдельно: если уже есть (например, из NodeSource — там npm идёт
+# в комплекте и конфликтует с пакетом npm из репозитория Ubuntu), не трогаем.
+if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  echo "Node.js уже установлен: $(node -v), npm: $(npm -v) — пропускаю установку"
+else
+  sudo apt-get install -y nodejs npm
+fi
+
+sudo apt-get install -y libreoffice python3 python3-pip nginx git
 pip3 install --user python-pptx
 
 echo "== 2. Клонирование репозитория =="
