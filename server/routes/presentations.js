@@ -209,11 +209,18 @@ async function processPresentationAsync(presentationId, filePath) {
     presentationId
   );
 
-  // Рендерим превью слайдов в JPEG (может занять время для больших презентаций)
+  // Рендерим превью слайдов в JPEG (может занять время для больших презентаций).
+  // LibreOffice headless иногда падает с первой попытки (блокировка профиля при
+  // параллельном запуске) — при ошибке пробуем ещё раз перед тем как сдаться.
   try {
     await renderPreviews(presentationId, filePath);
   } catch (err) {
-    console.error(`[presentations] Ошибка рендеринга превью #${presentationId}:`, err.message);
+    console.error(`[presentations] Ошибка рендеринга превью #${presentationId} (попытка 1):`, err.message);
+    try {
+      await renderPreviews(presentationId, filePath);
+    } catch (err2) {
+      console.error(`[presentations] Ошибка рендеринга превью #${presentationId} (попытка 2):`, err2.message);
+    }
   }
 }
 

@@ -16,9 +16,23 @@ async function main() {
 
   for (const p of presentations) {
     const previewDir = path.join(PREVIEWS_DIR, String(p.id));
-    const hasPreview = fs.existsSync(previewDir) && fs.readdirSync(previewDir).some((f) => f.endsWith('.jpg'));
-    if (hasPreview) {
-      console.log(`#${p.id}: превью уже есть, пропуск`);
+    // Проверяем не просто наличие хотя бы одного jpg, а полноту комплекта:
+    // из-за бага со смешиванием старых/новых файлов в outDir могли остаться
+    // превью с пропущенными индексами (например, есть slide-0 и slide-2, но нет slide-1).
+    let hasCompletePreview = false;
+    if (fs.existsSync(previewDir)) {
+      const jpgIndexes = new Set(
+        fs
+          .readdirSync(previewDir)
+          .filter((f) => /^slide-\d+\.jpg$/.test(f))
+          .map((f) => parseInt(f.match(/(\d+)/)[1], 10))
+      );
+      const expected = p.slide_count || 0;
+      hasCompletePreview =
+        expected > 0 && jpgIndexes.size === expected && Array.from({ length: expected }, (_, i) => i).every((i) => jpgIndexes.has(i));
+    }
+    if (hasCompletePreview) {
+      console.log(`#${p.id}: превью уже есть и полные, пропуск`);
       continue;
     }
     const filePath = path.join(UPLOADS_DIR, p.stored_filename);
