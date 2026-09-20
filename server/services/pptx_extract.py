@@ -98,7 +98,9 @@ def main():
         description = build_description(title, uniq_lines)
 
         try:
-            content_tags = detect_slide_content_tags(slide)
+            # pptx_path передаётся, чтобы детекция могла читать theme/tableStyles/chart XML напрямую
+            # из архива (цвета темы, стили таблиц, фолбэк для нестандартных chart-частей).
+            content_tags = detect_slide_content_tags(slide, pptx_path=path)
         except Exception:
             content_tags = []
 

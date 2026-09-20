@@ -180,8 +180,105 @@ const SOURCE_KIND_LABEL = {
   image: ' (картинка)',
 };
 
+const CHART_TYPE_RU = {
+  COLUMN_CLUSTERED: 'столбчатая',
+  COLUMN_STACKED: 'столбчатая с накоплением',
+  BAR_CLUSTERED: 'гистограмма',
+  BAR_STACKED: 'гистограмма с накоплением',
+  LINE: 'линейная',
+  LINE_MARKERS: 'линейная с маркерами',
+  PIE: 'круговая',
+  DOUGHNUT: 'кольцевая',
+  AREA: 'с областями',
+  XY_SCATTER: 'точечная',
+  RADAR: 'лепестковая',
+  UNKNOWN: 'тип не определён уверенно',
+};
+
+function emuToCm(emu) {
+  if (!emu && emu !== 0) return null;
+  return (emu / 360000).toFixed(1);
+}
+
+function fmtFont(font) {
+  if (!font || !font.name) return null;
+  const parts = [font.name];
+  if (font.size) parts.push(`${Math.round(font.size)}pt`);
+  const extra = [];
+  if (font.bold) extra.push('полужирный');
+  if (font.italic) extra.push('курсив');
+  if (font.color) extra.push(font.color);
+  let text = parts.join(' ');
+  if (extra.length) text += ', ' + extra.join(', ');
+  return text;
+}
+
+// Строит подробный список человекочитаемых пунктов описания стиля из style_payload —
+// показывается при клике на бейдж тега. Набор пунктов зависит от contentType/sourceKind,
+// так как у каждого источника свой набор извлечённых атрибутов.
+function styleDetailsFromTag(tag) {
+  const sp = tag.stylePayload || {};
+  const lines = [];
+
+  if (tag.contentType === 'table' && tag.sourceKind === 'native') {
+    lines.push(`Размер: ${sp.rows}×${sp.cols} ячеек`);
+    if (sp.headerFill) lines.push(`Заливка шапки: ${sp.headerFill}`);
+    const headerFont = fmtFont(sp.headerFont);
+    if (headerFont) lines.push(`Шрифт шапки: ${headerFont}`);
+    else if (sp.headerFont && (sp.headerFont.color || sp.headerFont.bold)) {
+      const extra = [sp.headerFont.bold ? 'полужирный' : null, sp.headerFont.color].filter(Boolean);
+      if (extra.length) lines.push(`Текст шапки: ${extra.join(', ')}`);
+    }
+    if (sp.bodyFill) lines.push(`Заливка тела: ${sp.bodyFill}`);
+    const bodyFont = fmtFont(sp.bodyFont);
+    if (bodyFont) lines.push(`Шрифт тела: ${bodyFont}`);
+    if (sp.bandingEnabled) lines.push(`Чередование строк (zebra): да${sp.bandFill ? `, цвет ${sp.bandFill}` : ''}`);
+    if (sp.bordersVisible === true) lines.push('Границы ячеек: видимы');
+    else if (sp.bordersVisible === false) lines.push('Границы ячеек: скрыты');
+    if (sp.widthEmu && sp.heightEmu) lines.push(`Размер блока: ${emuToCm(sp.widthEmu)}×${emuToCm(sp.heightEmu)} см`);
+  } else if (tag.contentType === 'table' && tag.sourceKind === 'imitation') {
+    lines.push(`Размер сетки: ${sp.rows}×${sp.cols} (${sp.blockCount} блоков)`);
+    if (sp.dominantFill) lines.push(`Основная заливка блоков: ${sp.dominantFill}`);
+    if (sp.distinctFills && sp.distinctFills.length > 1) lines.push(`Встречающиеся цвета: ${sp.distinctFills.join(', ')}`);
+    const sampleFont = fmtFont(sp.sampleFont);
+    if (sampleFont) lines.push(`Шрифт ячеек: ${sampleFont}`);
+    if (sp.alignment) lines.push(`Выравнивание текста: ${sp.alignment}`);
+    if (sp.avgBlockWidthEmu && sp.avgBlockHeightEmu) {
+      lines.push(`Средний размер ячейки: ${emuToCm(sp.avgBlockWidthEmu)}×${emuToCm(sp.avgBlockHeightEmu)} см`);
+    }
+    lines.push('Примечание: это не нативная PPT-таблица, а сетка из текстовых блоков');
+  } else if (tag.contentType === 'chart' && tag.sourceKind === 'native') {
+    const chartTypeRu = CHART_TYPE_RU[sp.chartType] || sp.chartType || 'тип не определён';
+    lines.push(`Тип графика: ${chartTypeRu}`);
+    if (sp.seriesColors && sp.seriesColors.length) lines.push(`Цвета рядов: ${sp.seriesColors.join(', ')}`);
+    if (sp.seriesCount) lines.push(`Число рядов: ${sp.seriesCount}`);
+    if (sp.categoryCount) lines.push(`Число категорий: ${sp.categoryCount}`);
+    lines.push(`Легенда: ${sp.hasLegend ? 'есть' : 'нет'}`);
+    lines.push(`Заголовок: ${sp.hasTitle ? 'есть' : 'нет'}`);
+    if (sp.gapWidth !== undefined && sp.gapWidth !== null) lines.push(`Зазор между столбцами: ${sp.gapWidth}%`);
+    if (sp.widthEmu && sp.heightEmu) lines.push(`Размер блока: ${emuToCm(sp.widthEmu)}×${emuToCm(sp.heightEmu)} см`);
+    if (sp.extractedVia === 'xml_fallback') lines.push('Стиль извлечён напрямую из XML графика (нестандартный формат chart-части)');
+    if (!sp.chartType && !sp.seriesColors) lines.push('Детали стиля недоступны для чтения');
+  } else if (tag.contentType === 'chart' && tag.sourceKind === 'image') {
+    const chartTypeRu = CHART_TYPE_RU[sp.chartType] || sp.chartType || 'тип не определён';
+    lines.push(`Предполагаемый тип (по OpenCV-эвристике): ${chartTypeRu}`);
+    if (sp.seriesPalette && sp.seriesPalette.length) lines.push(`Палитра серий/секторов: ${sp.seriesPalette.join(', ')}`);
+    if (sp.backgroundColor) lines.push(`Фон: ${sp.backgroundColor}`);
+    if (sp.dominantColors && sp.dominantColors.length) lines.push(`Общая доминирующая палитра: ${sp.dominantColors.join(', ')}`);
+    if (sp.signals) {
+      const s = sp.signals;
+      lines.push(`Признаки: покрытие ${Math.round((s.coverage || 0) * 100)}%, прямоугольных блоков ${s.rectLike || 0}, круглых/секторов ${s.circleLike || 0}`);
+    }
+    lines.push(`Уверенность распознавания: ${Math.round((tag.confidence || 0) * 100)}%`);
+    lines.push('Примечание: график вставлен как картинка, точные данные из него не извлекаемы');
+  }
+
+  if (lines.length === 0) return [tag.label || 'Описание стиля недоступно'];
+  return lines;
+}
+
 // Рендерит теги таблиц/графиков, найденных на слайде: бейджи в разметке контента,
-// по клику на бейдж — разворачивается человекочитаемое описание стиля.
+// по клику на бейдж — разворачивается подробный список атрибутов стиля.
 function renderContentTags(tags) {
   if (!tags || tags.length === 0) return null;
 
@@ -194,7 +291,8 @@ function renderContentTags(tags) {
         h('span', {}, (tag.contentType === 'table' ? 'Таблица' : 'График') + (SOURCE_KIND_LABEL[tag.sourceKind] || '')),
         svgIcon('chevronDown'),
       ]);
-      const detail = h('div', { class: 'content-tag-detail' }, tag.label || 'Описание стиля недоступно');
+      const detailItems = styleDetailsFromTag(tag).map((line) => h('li', {}, line));
+      const detail = h('div', { class: 'content-tag-detail' }, [h('ul', { class: 'content-tag-detail-list' }, detailItems)]);
       const wrap = h('div', { class: 'content-tag-item' }, [badge, detail]);
       badge.addEventListener('click', () => wrap.classList.toggle('is-open'));
       return wrap;
