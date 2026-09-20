@@ -14,6 +14,7 @@ const presentationRoutes = require('./routes/presentations');
 const slideRoutes = require('./routes/slides');
 const searchRoutes = require('./routes/search');
 const buildRoutes = require('./routes/build');
+const generateRoutes = require('./routes/generate');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -40,6 +41,7 @@ app.use('/api/presentations', presentationRoutes);
 app.use('/api/slides', slideRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/build', buildRoutes);
+app.use('/api/generate', generateRoutes);
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 

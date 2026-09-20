@@ -231,15 +231,20 @@ router.get('/', requireAuth, (req, res) => {
       spaceId,
       styleReferenceQuery: parsed.styleReferenceQuery,
     });
-    // Block 1: только распознавание намерения + подбор образца стиля.
-    // Само построение таблицы/графика по Excel/промпту — следующий блок.
+    // Block 3: распознали намерение и подобрали образец стиля из пространства (если он там
+    // есть) — сама генерация происходит через отдельный экран (POST /api/generate), потому что
+    // ей ещё нужен файл Excel с данными от пользователя, которого в строке поиска нет.
+    // generationSupported теперь true: search используется только чтобы сходу подсказать
+    // пользователю подходящий styleReference и открыть экран генерации предзаполненным;
+    // если styleReference не найден — экран генерации всё равно доступен, просто без
+    // предзаполненного варианта "стиль из пространства" (пользователь приложит свой файл-донор).
     return res.json({
       intent: parsed.intent,
       slides: [],
       presentations: [],
       parsed,
       styleReference,
-      generationSupported: false,
+      generationSupported: true,
     });
   }
 

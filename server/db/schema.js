@@ -86,6 +86,26 @@ function ensureSchema(db) {
       expires_at TEXT NOT NULL
     );
 
+    -- Block 3: сгенерированные по промпту таблицы/графики (см. server/services/contentGenerator.js).
+    -- mode различает тип сгенерированного контента; style_source_tag_id указывает на тег стиля,
+    -- если стиль был выбран из уже загруженных презентаций пространства (а не из отдельно
+    -- приложенного файла-донора — тогда style_source_tag_id NULL, а стиль был взят напрямую
+    -- из временно загруженного файла).
+    CREATE TABLE IF NOT EXISTS generation_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      requested_by INTEGER REFERENCES users(id),
+      space_id INTEGER REFERENCES spaces(id),
+      mode TEXT NOT NULL CHECK(mode IN ('table','chart')),
+      style_source_tag_id INTEGER REFERENCES slide_content_tags(id),
+      file_path TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','done','error')),
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_generation_jobs_space ON generation_jobs(space_id);
+
     CREATE INDEX IF NOT EXISTS idx_folders_space ON folders(space_id);
     CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
     CREATE INDEX IF NOT EXISTS idx_presentations_folder ON presentations(folder_id);

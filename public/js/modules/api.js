@@ -34,6 +34,14 @@ async function request(method, url, body, opts = {}) {
     const message = (data && data.error) || `Ошибка запроса (${res.status})`;
     const err = new Error(message);
     err.status = res.status;
+    // Некоторые эндпоинты (например /api/generate при TOO_LARGE) возвращают структурированный errorCode и
+    // дополнительные поля (capacity/requested) рядом с error — пробрасываем их на объект ошибки,
+    // чтобы вызывающий код мог показать конкретные числа вместо общего текста.
+    if (data && data.errorCode) {
+      err.errorCode = data.errorCode;
+      if (data.capacity) err.capacity = data.capacity;
+      if (data.requested) err.requested = data.requested;
+    }
     throw err;
   }
   return data;
@@ -114,4 +122,20 @@ export const api = {
   // build
   buildPresentation: (slideIds, queryText) => request('POST', '/api/build', { slideIds, queryText }),
   buildDownloadUrl: (id) => apiBase() + `/api/build/${id}/download`,
+
+  // generate (Block 3 — таблицы/графики по промпту в стиле образца)
+  excelPreview: (file) => {
+    const fd = new FormData();
+    fd.append('excelFile', file);
+    return request('POST', '/api/generate/excel-preview', fd);
+  },
+  styleOptions: (contentType, spaceId) =>
+    request('GET', `/api/generate/style-options?contentType=${contentType}${spaceId ? `&spaceId=${spaceId}` : ''}`),
+  generateContent: (payload, donorFile) => {
+    const fd = new FormData();
+    fd.append('payload', JSON.stringify(payload));
+    if (donorFile) fd.append('donorFile', donorFile);
+    return request('POST', '/api/generate', fd);
+  },
+  generateDownloadUrl: (id) => apiBase() + `/api/generate/${id}/download`,
 };

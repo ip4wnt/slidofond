@@ -5,6 +5,7 @@ import { renderLogin } from './modules/login.js';
 import { renderHome } from './modules/home.js';
 import { renderLoading, renderSearchResults, renderBuildResult, isBuildRequest } from './modules/searchResults.js';
 import { renderStorageShell, renderFolderTree, renderFileList } from './modules/storage.js';
+import { renderGenerateScreen, initGenerateWizard, prefillGenerateMode, prefillGenerateFromSearch } from './modules/generate.js';
 import { openGallery } from './modules/slideGallery.js';
 import { promptDialog, confirmDialog } from './modules/dialogs.js';
 import { openUsersAdminDialog } from './modules/usersAdmin.js';
@@ -15,7 +16,7 @@ import { openFilePicker } from './modules/upload.js';
 const root = document.getElementById('app');
 
 const store = createStore({
-  screen: 'loading', // loading | login | home | storage
+  screen: 'loading', // loading | login | home | storage | generate
   user: null,
   spaces: [],
   activeSpaceId: null, // единственное активное пространство — поиск и архив всегда ведутся в одном пространстве
@@ -159,6 +160,21 @@ async function onSubmitSearch(query) {
   } else {
     try {
       const data = await api.search(query, activeSpaceId);
+      if (data.intent === 'generate_table' || data.intent === 'generate_chart') {
+        // Block 3: строка поиска только распознаёт намерение и подбирает образец стиля из
+        // пространства — саму генерацию (нужен файл Excel с данными) продолжаем на отдельном
+        // экране-мастере, предзаполненном найденным styleReference, если он есть.
+        store.setState({ homeView: 'idle', query: '' });
+        initGenerateWizard();
+        if (data.styleReference) {
+          prefillGenerateFromSearch(data.intent === 'generate_table' ? 'table' : 'chart', data.styleReference);
+        } else {
+          prefillGenerateMode(data.intent === 'generate_table' ? 'table' : 'chart');
+          showToast('В пространстве пока нет образцов такого стиля — приложите свой файл-образец на шаге 3', 'default');
+        }
+        store.setState({ screen: 'generate' });
+        return;
+      }
       store.setState({
         homeView: 'search-results',
         searchResults: data.slides || [],
@@ -181,6 +197,15 @@ function onOpenStorage() {
   const spaceId = activeSpaceId || (spaces[0] && spaces[0].id);
   store.setState({ screen: 'storage' });
   loadStorageSpace(spaceId);
+}
+
+function onOpenGenerate() {
+  initGenerateWizard();
+  store.setState({ screen: 'generate' });
+}
+
+function onGenerateBackHome() {
+  store.setState({ screen: 'home' });
 }
 
 function onStorageBackHome() {
@@ -670,7 +695,7 @@ function render() {
     const resultsSlot = renderHome(
       bodyContainer,
       { spaces: state.spaces, activeSpaceId: state.activeSpaceId, view: state.homeView, query: state.query },
-      { onSelectSpace, onSubmitSearch, onOpenStorage }
+      { onSelectSpace, onSubmitSearch, onOpenStorage, onOpenGenerate }
     );
 
     if (state.homeView === 'loading') {
@@ -684,6 +709,22 @@ function render() {
     } else if (state.homeView === 'build-result') {
       renderBuildResult(resultsSlot, state.buildResult, { onBackHome });
     }
+    return;
+  }
+
+  if (state.screen === 'generate') {
+    const shell = h('div', {}, [renderAppHeader(state.user)]);
+    mount(root, shell);
+    const bodyContainer = h('div', { class: 'view' });
+    shell.appendChild(bodyContainer);
+
+    const generateActions = {
+      api,
+      onBackHome: onGenerateBackHome,
+      getSpaceId: () => store.getState().activeSpaceId,
+      onRerenderScreen: () => renderGenerateScreen(bodyContainer, generateActions),
+    };
+    renderGenerateScreen(bodyContainer, generateActions);
     return;
   }
 

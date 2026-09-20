@@ -4,7 +4,7 @@ import { svgIcon, spaceIcon } from './icons.js';
 // Рендерит главный экран: заголовок, круглые кнопки-переключатели пространств, строку поиска и кнопку хранилища.
 // Пространства — это вкладки с одинственным выбором: поиск и архив всегда ведутся только в одном активном пространстве.
 // state: { spaces, activeSpaceId, view: 'idle'|'results', query }
-// actions: { onSelectSpace, onSubmitSearch, onOpenStorage }
+// actions: { onSelectSpace, onSubmitSearch, onOpenStorage, onOpenGenerate }
 export function renderHome(container, state, actions) {
   const isTop = state.view !== 'idle';
 
@@ -66,6 +66,10 @@ export function renderHome(container, state, actions) {
         h('button', { class: 'storage-link', onClick: actions.onOpenStorage, 'data-testid': 'button-open-storage' }, [
           svgIcon('archive'),
           'Хранилище презентаций',
+        ]),
+        h('button', { class: 'storage-link', onClick: actions.onOpenGenerate, 'data-testid': 'button-open-generate' }, [
+          svgIcon('layers'),
+          'Создать таблицу/график по данным',
         ]),
       ]),
       h('div', { class: 'results-area', id: 'results-slot' }),

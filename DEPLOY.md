@@ -9,10 +9,10 @@
   ```bash
   sudo apt-get update && sudo apt-get install -y libreoffice
   ```
-- Python 3 с пакетами `python-pptx`, `opencv-python-headless`, `numpy`, `pillow` (используются вспомогательными скриптами анализа/сборки; `opencv-python-headless`/`numpy`/`pillow` нужны для модуля распознавания таблиц/графиков на слайдах, в том числе вставленных как картинки):
+- Python 3 с пакетами `python-pptx`, `opencv-python-headless`, `numpy`, `pillow`, `openpyxl` (используются вспомогательными скриптами анализа/сборки; `opencv-python-headless`/`numpy`/`pillow` нужны для модуля распознавания таблиц/графиков на слайдах, в том числе вставленных как картинки; `openpyxl` нужен для чтения загружаемых Excel-файлов в модуле генерации таблиц/графиков):
   ```bash
   sudo apt-get install -y python3 python3-pip
-  pip3 install python-pptx opencv-python-headless numpy pillow
+  pip3 install python-pptx opencv-python-headless numpy pillow openpyxl
   ```
 - nginx
 
