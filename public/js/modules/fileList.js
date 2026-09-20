@@ -154,6 +154,7 @@ function renderExpandPanel(p, canEdit, actions) {
             `Слайд ${s.index + 1}`,
             s.descriptionEdited ? h('span', { class: 'edited-badge' }, ' · отредактировано') : null,
           ]),
+          renderContentTags(s.contentTags),
           canEdit
             ? h('textarea', {
                 class: 'slide-desc-input',
@@ -170,6 +171,35 @@ function renderExpandPanel(p, canEdit, actions) {
   );
 
   return h('div', { class: 'file-card-expand' }, [summaryBox, slidesBox]);
+}
+
+const CONTENT_TYPE_ICON = { table: 'table', chart: 'barChart' };
+const SOURCE_KIND_LABEL = {
+  native: '',
+  imitation: ' (имитация блоками)',
+  image: ' (картинка)',
+};
+
+// Рендерит теги таблиц/графиков, найденных на слайде: бейджи в разметке контента,
+// по клику на бейдж — разворачивается человекочитаемое описание стиля.
+function renderContentTags(tags) {
+  if (!tags || tags.length === 0) return null;
+
+  return h(
+    'div',
+    { class: 'content-tags-list' },
+    tags.map((tag) => {
+      const badge = h('button', { type: 'button', class: `content-tag-badge content-tag-${tag.contentType}` }, [
+        svgIcon(CONTENT_TYPE_ICON[tag.contentType] || 'fileText'),
+        h('span', {}, (tag.contentType === 'table' ? 'Таблица' : 'График') + (SOURCE_KIND_LABEL[tag.sourceKind] || '')),
+        svgIcon('chevronDown'),
+      ]);
+      const detail = h('div', { class: 'content-tag-detail' }, tag.label || 'Описание стиля недоступно');
+      const wrap = h('div', { class: 'content-tag-item' }, [badge, detail]);
+      badge.addEventListener('click', () => wrap.classList.toggle('is-open'));
+      return wrap;
+    })
+  );
 }
 
 function truncate(text, len) {

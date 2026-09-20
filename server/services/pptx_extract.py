@@ -9,6 +9,10 @@
 import sys
 import json
 import re
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from content_tags import detect_slide_content_tags
 
 def extract_core_props(path):
     try:
@@ -93,11 +97,17 @@ def main():
         text_content = '\n'.join(uniq_lines)
         description = build_description(title, uniq_lines)
 
+        try:
+            content_tags = detect_slide_content_tags(slide)
+        except Exception:
+            content_tags = []
+
         slides_out.append({
             'index': idx,
             'title': title,
             'text_content': text_content,
             'description': description,
+            'content_tags': content_tags,
         })
         if text_content:
             all_text_snippets.append(text_content)

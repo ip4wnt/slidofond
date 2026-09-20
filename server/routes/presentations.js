@@ -73,7 +73,26 @@ function toPublic(p) {
   };
 }
 
-function slideToPublic(s) {
+function contentTagToPublic(t) {
+  let stylePayload = {};
+  try {
+    stylePayload = JSON.parse(t.style_payload || '{}');
+  } catch (e) {
+    stylePayload = {};
+  }
+  return {
+    id: t.id,
+    shapeIndex: t.shape_index,
+    contentType: t.content_type,
+    sourceKind: t.source_kind,
+    chartType: t.chart_type,
+    label: t.label,
+    stylePayload,
+    confidence: t.confidence,
+  };
+}
+
+function slideToPublic(s, tagsBySlide) {
   return {
     id: s.id,
     presentationId: s.presentation_id,
@@ -82,6 +101,7 @@ function slideToPublic(s) {
     description: s.description,
     descriptionEdited: !!s.description_edited,
     previewUrl: `/api/presentations/${s.presentation_id}/slides/${s.slide_index}/preview`,
+    contentTags: ((tagsBySlide && tagsBySlide.get(s.id)) || []).map(contentTagToPublic),
   };
 }
 
@@ -112,7 +132,19 @@ router.get('/:id', requireAuth, (req, res) => {
   const slides = db
     .prepare('SELECT * FROM slides WHERE presentation_id = ? ORDER BY slide_index')
     .all(id);
-  res.json({ ...toPublic(p), slides: slides.map(slideToPublic) });
+  const slideIds = slides.map((s) => s.id);
+  const tagsBySlide = new Map();
+  if (slideIds.length > 0) {
+    const placeholders = slideIds.map(() => '?').join(',');
+    const tagRows = db
+      .prepare(`SELECT * FROM slide_content_tags WHERE slide_id IN (${placeholders})`)
+      .all(...slideIds);
+    for (const row of tagRows) {
+      if (!tagsBySlide.has(row.slide_id)) tagsBySlide.set(row.slide_id, []);
+      tagsBySlide.get(row.slide_id).push(row);
+    }
+  }
+  res.json({ ...toPublic(p), slides: slides.map((s) => slideToPublic(s, tagsBySlide)) });
 });
 
 // Превью слайда в JPEG
@@ -194,9 +226,27 @@ async function processPresentationAsync(presentationId, filePath) {
     `INSERT INTO slides (presentation_id, slide_index, title, text_content, description)
      VALUES (?, ?, ?, ?, ?)`
   );
+  const insertContentTag = db.prepare(
+    `INSERT INTO slide_content_tags
+       (slide_id, shape_index, content_type, source_kind, chart_type, label, style_payload, confidence)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
   const tx = db.transaction((slides) => {
     for (const s of slides) {
-      insertSlide.run(presentationId, s.index, s.title, s.text_content, s.description);
+      const info = insertSlide.run(presentationId, s.index, s.title, s.text_content, s.description);
+      const slideId = info.lastInsertRowid;
+      for (const tag of s.content_tags || []) {
+        insertContentTag.run(
+          slideId,
+          tag.shape_index ?? 0,
+          tag.content_type,
+          tag.source_kind,
+          tag.chart_type ?? null,
+          tag.label || '',
+          JSON.stringify(tag.style_payload || {}),
+          tag.confidence ?? 1
+        );
+      }
     }
   });
   tx(analysis.slides);

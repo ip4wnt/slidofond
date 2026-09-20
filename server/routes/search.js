@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { parseSearchQuery } = require('../services/queryParser');
+const { findStyleReference } = require('../services/styleReference');
 
 const router = express.Router();
 
@@ -209,6 +210,10 @@ function searchPresentations({ presentationQuery, spaceId, presentationIds }) {
 //   - "презентация/преза ..."                  -> ищем презентации целиком
 //   - "слайд ... из презы/презентации Y"       -> слайд, дополнительно отфильтрованный по презентации Y
 //   - "... 2025 года"                          -> результат ограничивается презентациями за указанный год
+//   - "сделай таблицу/график в стиле X"    -> generate_table/generate_chart: Block 1 лишь
+//        подбирает и возвращает образец стиля (из явно указанной презентации или,
+//        если она не указана, из активного пространства) — само построение таблицы/графика
+//        по промпту вне рамок Block 1, будет реализовано отдельно.
 // Поиск всегда ведётся в рамках ОДНОГО пространства (spaceId) — переключение пространств
 // теперь находится в UI как единый активный таб, а не набор фильтров.
 router.get('/', requireAuth, (req, res) => {
@@ -218,6 +223,26 @@ router.get('/', requireAuth, (req, res) => {
   if (!q.trim()) return res.json({ intent: 'slide', slides: [], presentations: [] });
 
   const parsed = parseSearchQuery(q);
+
+  if (parsed.intent === 'generate_table' || parsed.intent === 'generate_chart') {
+    const contentType = parsed.intent === 'generate_table' ? 'table' : 'chart';
+    const styleReference = findStyleReference({
+      contentType,
+      spaceId,
+      styleReferenceQuery: parsed.styleReferenceQuery,
+    });
+    // Block 1: только распознавание намерения + подбор образца стиля.
+    // Само построение таблицы/графика по Excel/промпту — следующий блок.
+    return res.json({
+      intent: parsed.intent,
+      slides: [],
+      presentations: [],
+      parsed,
+      styleReference,
+      generationSupported: false,
+    });
+  }
+
   const presentationIds = parsed.year !== null ? presentationIdsForYear(parsed.year, spaceId) : null;
 
   if (parsed.intent === 'presentation') {

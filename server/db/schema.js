@@ -62,6 +62,19 @@ function ensureSchema(db) {
       preview_jpeg_path TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS slide_content_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slide_id INTEGER NOT NULL REFERENCES slides(id) ON DELETE CASCADE,
+      shape_index INTEGER NOT NULL DEFAULT 0,
+      content_type TEXT NOT NULL CHECK(content_type IN ('table','chart')),
+      source_kind TEXT NOT NULL CHECK(source_kind IN ('native','imitation','image')),
+      chart_type TEXT,
+      label TEXT NOT NULL DEFAULT '',
+      style_payload TEXT NOT NULL DEFAULT '{}',
+      confidence REAL NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS export_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       requested_by INTEGER REFERENCES users(id),
@@ -78,6 +91,8 @@ function ensureSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_presentations_folder ON presentations(folder_id);
     CREATE INDEX IF NOT EXISTS idx_presentations_space ON presentations(space_id);
     CREATE INDEX IF NOT EXISTS idx_slides_presentation ON slides(presentation_id);
+    CREATE INDEX IF NOT EXISTS idx_content_tags_slide ON slide_content_tags(slide_id);
+    CREATE INDEX IF NOT EXISTS idx_content_tags_type ON slide_content_tags(content_type);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS slides_fts USING fts5(
       title, text_content, description, content='slides', content_rowid='id'
