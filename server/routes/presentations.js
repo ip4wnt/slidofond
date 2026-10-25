@@ -258,8 +258,10 @@ async function processPresentationAsync(presentationId, filePath) {
   });
   tx(analysis.slides);
 
+  // Статус остаётся 'processing' до готовности превью: иначе интерфейс перестаёт опрашивать
+  // карточку раньше, чем появятся картинки слайдов, и показывает «битое» превью.
   db.prepare(
-    `UPDATE presentations SET slide_count = ?, summary_text = ?, summary_status = 'done',
+    `UPDATE presentations SET slide_count = ?, summary_text = ?,
      file_created_at = COALESCE(?, file_created_at), file_modified_at = COALESCE(?, file_modified_at)
      WHERE id = ?`
   ).run(
@@ -278,10 +280,12 @@ async function processPresentationAsync(presentationId, filePath) {
   // незамеченным для пользователя.
   try {
     await renderPreviews(presentationId, filePath);
+    db.prepare("UPDATE presentations SET summary_status = 'done' WHERE id = ?").run(presentationId);
   } catch (err) {
     console.error(`[presentations] Ошибка рендеринга превью #${presentationId} (попытка 1):`, err.message);
     try {
       await renderPreviews(presentationId, filePath);
+      db.prepare("UPDATE presentations SET summary_status = 'done' WHERE id = ?").run(presentationId);
     } catch (err2) {
       console.error(`[presentations] Ошибка рендеринга превью #${presentationId} (попытка 2):`, err2.message);
       db.prepare("UPDATE presentations SET summary_status = 'error', error_message = ? WHERE id = ?").run(
