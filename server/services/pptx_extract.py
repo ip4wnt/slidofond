@@ -26,18 +26,27 @@ def extract_core_props(path):
         return None, None
 
 
+# Управляющие символы из PPTX (вертикальная табуляция — мягкий перенос строки и т. п.)
+# заменяем пробелом, иначе в интерфейсе они отображаются «квадратиками».
+CONTROL_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+
+
+def clean_text(text):
+    return CONTROL_CHARS.sub(' ', text).strip()
+
+
 def shape_text(shape, lines):
     if shape.has_text_frame:
         for para in shape.text_frame.paragraphs:
-            text = ''.join(run.text for run in para.runs).strip()
+            text = clean_text(''.join(run.text for run in para.runs))
             if not text and para.runs == []:
-                text = para.text.strip()
+                text = clean_text(para.text)
             if text:
                 lines.append(text)
     if shape.has_table:
         table = shape.table
         for row in table.rows:
-            cells = [c.text.strip() for c in row.cells if c.text.strip()]
+            cells = [clean_text(c.text) for c in row.cells if clean_text(c.text)]
             if cells:
                 lines.append(' | '.join(cells))
     if shape.shape_type == 6:  # GROUP
@@ -72,8 +81,8 @@ def main():
         title = ''
         # Заголовок — из placeholder типа title, если есть
         try:
-            if slide.shapes.title and slide.shapes.title.text.strip():
-                title = slide.shapes.title.text.strip()
+            if slide.shapes.title and clean_text(slide.shapes.title.text):
+                title = clean_text(slide.shapes.title.text)
         except Exception:
             pass
 
