@@ -19,6 +19,8 @@ const generateRoutes = require('./routes/generate');
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// За nginx: доверяем первому прокси, чтобы req.ip и secure-cookie работали корректно
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '2mb' }));
 app.use(
   session({
