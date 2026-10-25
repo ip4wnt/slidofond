@@ -34,6 +34,20 @@ export function renderFolderTree(container, { folders, selectedFolderId, expande
         class: `folder-row ${isSelected ? 'selected' : ''} ${isCut ? 'cut' : ''}`,
         'data-testid': `folder-row-${folder.id}`,
         onClick: () => actions.onSelect(folder.id),
+        // Папка в дереве — цель для перетаскивания: файлы из системы (загрузка в эту папку)
+        // и карточки презентаций из списка (перенос между папками). Как в обычном проводнике.
+        onDragEnter: canEdit ? (e) => { e.preventDefault(); e.currentTarget.classList.add('drop-target'); } : null,
+        onDragOver: canEdit ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = hasPresentationPayload(e) ? 'move' : 'copy'; } : null,
+        onDragLeave: canEdit ? (e) => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drop-target'); } : null,
+        onDrop: canEdit ? (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.classList.remove('drop-target');
+          const presentationId = Number(e.dataTransfer.getData('application/x-slidevault-presentation'));
+          if (presentationId && actions.onDropPresentation) return actions.onDropPresentation(presentationId, folder.id);
+          if (e.dataTransfer.files && e.dataTransfer.files.length && actions.onDropFiles) return actions.onDropFiles(folder.id, e.dataTransfer.files);
+          return undefined;
+        } : null,
       },
       [
         h('span', {
@@ -82,6 +96,10 @@ export function renderFolderTree(container, { folders, selectedFolderId, expande
   const treeNode = h('div', { class: 'folder-tree' }, roots.map((f) => renderNode(f, 0)));
 
   container.replaceChildren(treeNode);
+}
+
+function hasPresentationPayload(e) {
+  return Array.from(e.dataTransfer.types || []).includes('application/x-slidevault-presentation');
 }
 
 function svgIconMarkup(name) {

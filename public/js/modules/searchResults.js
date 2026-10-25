@@ -16,9 +16,25 @@ export function renderLoading(slot, label = 'Ищем подходящие сл�
   mount(slot, h('div', { class: 'loading-row' }, [h('div', { class: 'spinner' }), label]));
 }
 
-export function renderSearchResults(slot, { query, intent, slides, presentations }, actions) {
+// Подпись о контексте использования, если он есть у результата (событие · докладчик · место).
+function usageLine(usage) {
+  if (!usage) return '';
+  return [usage.event, usage.speaker, usage.place, usage.date].filter(Boolean).join(' · ');
+}
+
+export function renderSearchResults(slot, { query, intent, slides, presentations, context }, actions) {
   const items = intent === 'presentation' ? presentations || [] : slides || [];
   const countLabel = intent === 'presentation' ? `Найдено презентаций: ${items.length}` : `Найдено слайдов: ${items.length}`;
+  // Если часть запроса распознана как контекст (докладчик, площадка, событие) — говорим об этом явно.
+  const contextWords = (context && context.contextWords) || [];
+  const topicWords = (context && context.topicWords) || [];
+  const contextNote = contextWords.length
+    ? h('div', { class: 'context-note', 'data-testid': 'context-note' }, [
+        'Учтен контекст использования: ',
+        h('b', {}, contextWords.join(', ')),
+        topicWords.length ? ` — тема: ${topicWords.join(', ')}` : '',
+      ])
+    : null;
 
   const header = h('div', { class: 'results-header' }, [
     h('button', { class: 'back-btn', onClick: actions.onBackHome, 'data-testid': 'button-back-home' }, [
@@ -47,7 +63,7 @@ export function renderSearchResults(slot, { query, intent, slides, presentations
       ? renderPresentationGrid(items, actions)
       : renderSlideGrid(items, actions);
 
-  mount(slot, h('div', {}, [header, grid]));
+  mount(slot, h('div', {}, [header, contextNote, grid]));
 }
 
 function renderSlideGrid(slides, actions) {
@@ -65,6 +81,7 @@ function renderSlideGrid(slides, actions) {
           h('div', { class: 'slide-card-title' }, slide.title || 'Без названия'),
           h('div', { class: 'slide-card-desc' }, slide.description || ''),
           h('div', { class: 'slide-card-source' }, `Из файла: ${slide.originalFilename}`),
+          usageLine(slide.usage) && h('div', { class: 'slide-card-usage' }, usageLine(slide.usage)),
         ]),
         h('div', { class: 'slide-card-actions' }, [
           h(
@@ -98,6 +115,7 @@ function renderPresentationGrid(presentations, actions) {
           h('div', { class: 'slide-card-title' }, p.originalFilename || 'Без названия'),
           h('div', { class: 'slide-card-desc' }, p.summaryText || ''),
           h('div', { class: 'slide-card-source' }, `Слайдов: ${p.slideCount || 0}`),
+          usageLine(p.usage) && h('div', { class: 'slide-card-usage' }, usageLine(p.usage)),
         ]),
         h('div', { class: 'slide-card-actions' }, [
           h(

@@ -117,7 +117,10 @@ export const api = {
   updateSlide: (id, data) => request('PATCH', `/api/slides/${id}`, data),
 
   // search — поиск всегда в одном активном пространстве
-  search: (q, spaceId) => request('GET', `/api/search?q=${encodeURIComponent(q)}${spaceId ? `&spaceId=${spaceId}` : ''}`),
+  search: (q, spaceId, mode) =>
+    request('GET', `/api/search?q=${encodeURIComponent(q)}${spaceId ? `&spaceId=${spaceId}` : ''}${mode ? `&mode=${mode}` : ''}`),
+  // Блок «Где использовалась»: { event, speaker, place, date, notes }
+  updateUsage: (id, usage) => request('PATCH', `/api/presentations/${id}/usage`, usage),
 
   // build
   buildPresentation: (slideIds, queryText) => request('POST', '/api/build', { slideIds, queryText }),

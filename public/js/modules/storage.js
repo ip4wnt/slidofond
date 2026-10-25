@@ -20,7 +20,7 @@ export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, 
         h(
           'button',
           {
-            class: `space-circle space-circle-sm ${space.id === activeSpaceId ? 'active' : ''}`,
+            class: `pill space-circle space-circle-sm ${space.id === activeSpaceId ? 'active' : ''}`,
             onClick: () => actions.onSelectSpace(space.id),
             role: 'tab',
             'aria-selected': space.id === activeSpaceId ? 'true' : 'false',
@@ -34,7 +34,7 @@ export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, 
     ),
   ]);
 
-  const archiveTitle = h('div', { class: 'archive-title-band' }, [h('h1', {}, 'Архивный фонд')]);
+  const archiveTitle = h('div', { class: 'archive-title-band' }, [h('h1', {}, 'Проводник'), h('div', { class: 'explorer-hint' }, 'Перетащите файлы презентаций в папку или на папку в дереве; карточку можно перенести в другую папку перетаскиванием')]);
 
   const toolbar = h('div', { class: 'archive-toolbar' }, [
     h('div', { class: 'archive-toolbar-tools' }, [

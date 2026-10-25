@@ -4,7 +4,9 @@ const path = require('path');
 const fs = require('fs');
 
 const ROOT_DIR = path.join(__dirname, '..', '..');
-const DATA_DIR = path.join(ROOT_DIR, 'storage');
+// Каталог данных (загрузки, превью, экспорт, база). В проде задается через SLIDEVAULT_DATA_DIR
+// и указывает на отдельный диск для презентаций; по умолчанию — ./storage рядом с кодом.
+const DATA_DIR = process.env.SLIDEVAULT_DATA_DIR ? path.resolve(process.env.SLIDEVAULT_DATA_DIR) : path.join(ROOT_DIR, 'storage');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const PREVIEWS_DIR = path.join(DATA_DIR, 'previews');
 const EXPORTS_DIR = path.join(DATA_DIR, 'exports');

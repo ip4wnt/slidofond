@@ -3,8 +3,12 @@
 export function attachUploadZone(zoneEl, onFiles) {
   let dragCounter = 0;
 
+  // Перетаскивание карточки презентации внутри проводника — не загрузка, подсветку зоны не включаем.
+  const isInternalDrag = (e) => Array.from(e.dataTransfer?.types || []).includes('application/x-slidevault-presentation');
+
   zoneEl.addEventListener('dragenter', (e) => {
     e.preventDefault();
+    if (isInternalDrag(e)) return;
     dragCounter++;
     zoneEl.classList.add('drag-over');
   });
@@ -20,6 +24,7 @@ export function attachUploadZone(zoneEl, onFiles) {
     e.preventDefault();
     dragCounter = 0;
     zoneEl.classList.remove('drag-over');
+    if (isInternalDrag(e)) return;
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       onFiles(e.dataTransfer.files);
     }

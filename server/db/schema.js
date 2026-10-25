@@ -141,6 +141,47 @@ function ensureSchema(db) {
   if (!presentationColumns.includes('error_message')) {
     db.exec('ALTER TABLE presentations ADD COLUMN error_message TEXT');
   }
+
+  // Блок «Где использовалась»: контекст презентации, который пользователь заполняет вручную.
+  // Участвует в поиске, когда запрос содержит что-то кроме темы слайда (докладчик, площадка, событие).
+  for (const col of ['usage_event', 'usage_speaker', 'usage_place', 'usage_date', 'usage_notes']) {
+    if (!presentationColumns.includes(col)) {
+      db.exec(`ALTER TABLE presentations ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
+  // Полнотекстовый индекс по самой презентации: имя файла, общее описание и блок использования.
+  // Внешний контент (content=presentations), поэтому триггеры держат его в актуальном состоянии.
+  const hadPresentationFts = !!db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'presentations_fts'")
+    .get();
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS presentations_fts USING fts5(
+      original_filename, summary_text, usage_event, usage_speaker, usage_place, usage_date, usage_notes,
+      content='presentations', content_rowid='id'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS presentations_ai AFTER INSERT ON presentations BEGIN
+      INSERT INTO presentations_fts(rowid, original_filename, summary_text, usage_event, usage_speaker, usage_place, usage_date, usage_notes)
+      VALUES (new.id, new.original_filename, new.summary_text, new.usage_event, new.usage_speaker, new.usage_place, new.usage_date, new.usage_notes);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS presentations_ad AFTER DELETE ON presentations BEGIN
+      INSERT INTO presentations_fts(presentations_fts, rowid, original_filename, summary_text, usage_event, usage_speaker, usage_place, usage_date, usage_notes)
+      VALUES ('delete', old.id, old.original_filename, old.summary_text, old.usage_event, old.usage_speaker, old.usage_place, old.usage_date, old.usage_notes);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS presentations_au AFTER UPDATE ON presentations BEGIN
+      INSERT INTO presentations_fts(presentations_fts, rowid, original_filename, summary_text, usage_event, usage_speaker, usage_place, usage_date, usage_notes)
+      VALUES ('delete', old.id, old.original_filename, old.summary_text, old.usage_event, old.usage_speaker, old.usage_place, old.usage_date, old.usage_notes);
+      INSERT INTO presentations_fts(rowid, original_filename, summary_text, usage_event, usage_speaker, usage_place, usage_date, usage_notes)
+      VALUES (new.id, new.original_filename, new.summary_text, new.usage_event, new.usage_speaker, new.usage_place, new.usage_date, new.usage_notes);
+    END;
+  `);
+  if (!hadPresentationFts) {
+    // Индекс только что создан на уже заполненной базе — наполняем его существующими строками.
+    db.exec("INSERT INTO presentations_fts(presentations_fts) VALUES ('rebuild')");
+  }
 }
 
 module.exports = { ensureSchema };

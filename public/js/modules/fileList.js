@@ -82,6 +82,7 @@ function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
     h('div', { class: 'file-card-body' }, [
       h('div', { class: 'file-card-title', title: p.originalFilename }, p.originalFilename),
       p.summaryText && h('div', { class: 'file-card-summary' }, truncate(p.summaryText, 220)),
+      renderUsageChips(p.usage),
       h(
         'button',
         { class: 'file-card-meta-toggle', onClick: () => actions.onToggleExpand(p.id), 'data-testid': `button-expand-${p.id}` },
@@ -123,7 +124,89 @@ function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
 
   const expandPanel = isExpanded ? renderExpandPanel(p, canEdit, actions) : null;
 
-  return h('div', { class: 'file-card', 'data-testid': `file-card-${p.id}` }, [main, expandPanel]);
+  // Карточку можно перетащить на папку в дереве — презентация переедет туда (как в проводнике).
+  return h('div', {
+    class: 'file-card',
+    'data-testid': `file-card-${p.id}`,
+    draggable: canEdit ? 'true' : null,
+    title: canEdit ? 'Перетащите на папку в дереве, чтобы перенести' : null,
+    onDragStart: canEdit ? (e) => {
+      e.dataTransfer.setData('application/x-slidevault-presentation', String(p.id));
+      e.dataTransfer.setData('text/plain', p.originalFilename);
+      e.dataTransfer.effectAllowed = 'move';
+      e.currentTarget.classList.add('dragging');
+    } : null,
+    onDragEnd: canEdit ? (e) => e.currentTarget.classList.remove('dragging') : null,
+  }, [main, expandPanel]);
+}
+
+// Короткие метки из блока «Где использовалась» прямо в карточке: событие, докладчик, площадка, дата.
+function renderUsageChips(usage) {
+  if (!usage) return null;
+  const chips = [
+    usage.event && ['flag', usage.event],
+    usage.speaker && ['mic', usage.speaker],
+    usage.place && ['pin', usage.place],
+    usage.date && ['calendar', usage.date],
+  ].filter(Boolean);
+  if (chips.length === 0) return null;
+  return h('div', { class: 'usage-summary' }, chips.map(([icon, text]) => h('span', { class: 'usage-chip', title: text }, [svgIcon(icon), truncate(text, 60)])));
+}
+
+// Блок «Где использовалась»: свободные поля о контексте презентации. Эти сведения участвуют
+// в поиске, когда запрос содержит что-то кроме темы слайда (докладчик, площадка, событие).
+function renderUsageBlock(p, canEdit, actions) {
+  const usage = p.usage || { event: '', speaker: '', place: '', date: '', notes: '' };
+  const fields = [
+    { key: 'event', label: 'Событие или повод', placeholder: 'Форум «Сообщество», отчет перед Советом, вебинар для НКО…' },
+    { key: 'speaker', label: 'Кто выступал', placeholder: 'Фамилия, имя, должность' },
+    { key: 'place', label: 'Где проходило', placeholder: 'Город, площадка или онлайн' },
+    { key: 'date', label: 'Когда', placeholder: '2025-03-14 или «март 2025»' },
+    { key: 'notes', label: 'Заметки', placeholder: 'Аудитория, для чего готовилась, что важно помнить…', wide: true, multiline: true },
+  ];
+  if (!canEdit) {
+    const filled = fields.filter((f) => usage[f.key]);
+    return h('div', { class: 'usage-block' }, [
+      h('div', { class: 'usage-block-head' }, [h('h4', {}, 'Где использовалась')]),
+      filled.length
+        ? h('div', { class: 'usage-grid' }, filled.map((f) => h('div', { class: `field${f.wide ? ' wide' : ''}` }, [h('label', {}, f.label), h('div', { class: 'file-card-summary' }, usage[f.key])])))
+        : h('div', { class: 'usage-block-hint' }, 'Сведения пока не заполнены.'),
+    ]);
+  }
+  const inputs = {};
+  const saved = h('span', { class: 'usage-saved' }, '');
+  const saveBtn = h('button', { class: 'btn btn-primary btn-sm', type: 'button', 'data-testid': `button-save-usage-${p.id}` }, 'Сохранить');
+  const collect = () => Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value.trim()]));
+  const isDirty = () => fields.some((f) => (usage[f.key] || '') !== inputs[f.key].value.trim());
+  saveBtn.disabled = true;
+  const onInput = () => { saveBtn.disabled = !isDirty(); saved.textContent = ''; };
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    try {
+      await actions.onSaveUsage(p.id, collect());
+      saved.textContent = 'Сохранено';
+    } catch (err) {
+      saved.textContent = '';
+      saveBtn.disabled = false;
+      throw err;
+    }
+  });
+  const grid = h('div', { class: 'usage-grid' }, fields.map((f) => {
+    const el = f.multiline
+      ? h('textarea', { placeholder: f.placeholder, 'data-testid': `usage-${f.key}-${p.id}`, onInput })
+      : h('input', { type: 'text', placeholder: f.placeholder, 'data-testid': `usage-${f.key}-${p.id}`, onInput });
+    el.value = usage[f.key] || '';
+    inputs[f.key] = el;
+    return h('div', { class: `field${f.wide ? ' wide' : ''}` }, [h('label', {}, f.label), el]);
+  }));
+  return h('div', { class: 'usage-block' }, [
+    h('div', { class: 'usage-block-head' }, [
+      h('h4', {}, 'Где использовалась'),
+      h('span', { class: 'usage-block-hint' }, 'Учитывается в поиске: «слайд про бюджет с форума в Казани»'),
+    ]),
+    grid,
+    h('div', { class: 'usage-actions' }, [saveBtn, saved]),
+  ]);
 }
 
 function renderExpandPanel(p, canEdit, actions) {
@@ -170,7 +253,7 @@ function renderExpandPanel(p, canEdit, actions) {
     )
   );
 
-  return h('div', { class: 'file-card-expand' }, [summaryBox, slidesBox]);
+  return h('div', { class: 'file-card-expand' }, [renderUsageBlock(p, canEdit, actions), summaryBox, slidesBox]);
 }
 
 const CONTENT_TYPE_ICON = { table: 'table', chart: 'barChart' };

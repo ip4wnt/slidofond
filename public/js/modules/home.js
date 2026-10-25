@@ -1,81 +1,67 @@
 import { h, mount } from './render.js';
 import { svgIcon, spaceIcon } from './icons.js';
 
-// Рендерит главный экран: заголовок, круглые кнопки-переключатели пространств, строку поиска и кнопку хранилища.
-// Пространства — это вкладки с одинственным выбором: поиск и архив всегда ведутся только в одном активном пространстве.
-// state: { spaces, activeSpaceId, view: 'idle'|'results', query }
-// actions: { onSelectSpace, onSubmitSearch, onOpenStorage, onOpenGenerate }
-export function renderHome(container, state, actions) {
-  const isTop = state.view !== 'idle';
+// Главная по макету Figma (страница 1-136): строка поиска с золотой стрелкой, под ней
+// режимы «Найти слайд» / «Найти презентацию» / «Создать презентацию» (последний пока
+// недоступен), внизу экрана — пять пространств. Возвращает слот для результатов поиска.
+export function renderHome(container, { spaces, activeSpaceId, view, query, searchMode }, { onSelectSpace, onSubmitSearch, onSetSearchMode }) {
+  const isIdle = view === 'idle';
 
-  const spacesRow = h(
-    'div',
-    { class: 'spaces-row', role: 'tablist' },
-    state.spaces.map((space) =>
-      h(
-        'button',
-        {
-          class: `space-circle ${space.id === state.activeSpaceId ? 'active' : ''}`,
-          onClick: () => actions.onSelectSpace(space.id),
-          role: 'tab',
-          'aria-selected': space.id === state.activeSpaceId ? 'true' : 'false',
-          'aria-label': space.name,
-          title: space.name,
-          'data-testid': `space-pill-${space.slug}`,
-        },
-        [spaceIcon(space.icon)]
-      )
-    )
-  );
+  const input = h('input', {
+    type: 'text', class: 'search-input', placeholder: 'Что будем искать?', value: query || '',
+    'data-testid': 'input-search', autocomplete: 'off', 'aria-label': 'Поисковый запрос',
+  });
 
-  const searchForm = h(
-    'form',
-    {
-      class: 'search-box',
-      onSubmit: (e) => {
-        e.preventDefault();
-        const input = e.target.querySelector('input');
-        actions.onSubmitSearch(input.value.trim());
-      },
-    },
-    [
-      h('input', {
-        class: 'search-input',
-        type: 'text',
-        placeholder: 'Здравствуйте! Чем могу Вам помочь?',
-        value: state.query || '',
-        'data-testid': 'input-search',
-      }),
-      h('button', { class: 'search-submit-btn', type: 'submit', 'aria-label': 'Найти', 'data-testid': 'button-search' }, [
-        svgIcon('sendArrow'),
-      ]),
-    ]
-  );
+  const submit = () => {
+    const value = input.value.trim();
+    if (value) onSubmitSearch(value);
+  };
 
-  const view = h(
-    'div',
-    { class: `home-view ${isTop ? 'top-aligned' : 'centered'}` },
-    [
-      !isTop &&
-        h('div', { class: 'home-intro' }, [
-          h('h1', {}, 'Центральный слайдофонд'),
-        ]),
-      spacesRow,
-      h('div', { class: 'search-box-wrap' }, [searchForm]),
-      h('div', { class: 'storage-link-wrap' }, [
-        h('button', { class: 'storage-link', onClick: actions.onOpenStorage, 'data-testid': 'button-open-storage' }, [
-          svgIcon('archive'),
-          'Хранилище презентаций',
-        ]),
-        h('button', { class: 'storage-link', onClick: actions.onOpenGenerate, 'data-testid': 'button-open-generate' }, [
-          svgIcon('layers'),
-          'Создать таблицу/график по данным',
-        ]),
-      ]),
-      h('div', { class: 'results-area', id: 'results-slot' }),
-    ]
-  );
+  const searchBox = h('div', { class: 'search-box-wrap' }, [
+    h('form', { class: 'search-box', onSubmit: (e) => { e.preventDefault(); submit(); } }, [
+      input,
+      h('button', { type: 'submit', class: 'search-submit-btn', 'aria-label': 'Искать', 'data-testid': 'button-search' }, [svgIcon('arrowGo')]),
+    ]),
+  ]);
 
-  mount(container, view);
-  return view.querySelector('#results-slot');
+  const modes = [
+    { id: 'slide', label: 'Найти слайд' },
+    { id: 'presentation', label: 'Найти презентацию' },
+    { id: 'create', label: 'Создать презентацию', disabled: true, title: 'Сборка презентации по запросу появится позже' },
+  ];
+  const modeRow = h('div', { class: 'mode-row', role: 'group', 'aria-label': 'Режим поиска' }, modes.map((m) =>
+    h('button', {
+      type: 'button',
+      class: `pill mode-pill${searchMode === m.id ? ' active' : ''}`,
+      'aria-pressed': searchMode === m.id ? 'true' : 'false',
+      disabled: !!m.disabled,
+      title: m.title || null,
+      'data-testid': `mode-${m.id}`,
+      onClick: () => { if (!m.disabled) onSetSearchMode(m.id); },
+    }, m.label)
+  ));
+
+  const resultsSlot = h('div', { class: 'results-area' });
+
+  const spacesRow = h('div', { class: 'spaces-row', role: 'group', 'aria-label': 'Пространства' }, spaces.map((space) =>
+    h('button', {
+      class: `pill space-circle${space.id === activeSpaceId ? ' active' : ''}`,
+      title: space.name,
+      'aria-label': space.name,
+      'aria-pressed': space.id === activeSpaceId ? 'true' : 'false',
+      onClick: () => onSelectSpace(space.id),
+      'data-testid': `space-${space.slug}`,
+    }, [spaceIcon(space.icon)])
+  ));
+
+  const view_ = h('div', { class: `home-view ${isIdle ? 'centered' : 'top-aligned'}` }, [
+    h('div', { class: 'home-search-block' }, [searchBox, modeRow]),
+    !isIdle && resultsSlot,
+    isIdle && h('div', { class: 'home-spacer' }),
+    spacesRow,
+  ]);
+
+  mount(container, view_);
+  if (isIdle) setTimeout(() => input.focus(), 0);
+  return resultsSlot;
 }

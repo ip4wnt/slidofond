@@ -70,6 +70,13 @@ function toPublic(p) {
     summaryText: p.summary_text,
     summaryStatus: p.summary_status,
     errorMessage: p.error_message || null,
+    usage: {
+      event: p.usage_event || '',
+      speaker: p.usage_speaker || '',
+      place: p.usage_place || '',
+      date: p.usage_date || '',
+      notes: p.usage_notes || '',
+    },
   };
 }
 
@@ -293,6 +300,27 @@ router.patch('/:id/summary', requireAuth, requireRole('editor'), (req, res) => {
   const { summaryText } = req.body || {};
   if (summaryText === undefined) return res.status(400).json({ error: 'Укажите summaryText' });
   db.prepare('UPDATE presentations SET summary_text = ? WHERE id = ?').run(summaryText, id);
+  res.json(toPublic(db.prepare('SELECT * FROM presentations WHERE id = ?').get(id)));
+});
+
+// Блок «Где использовалась»: событие, докладчик, площадка, дата, заметки — editor/admin.
+// Поля свободные, пустая строка допустима; значения попадают в presentations_fts через триггер.
+const USAGE_FIELDS = { event: 'usage_event', speaker: 'usage_speaker', place: 'usage_place', date: 'usage_date', notes: 'usage_notes' };
+router.patch('/:id/usage', requireAuth, requireRole('editor'), (req, res) => {
+  const id = Number(req.params.id);
+  const p = db.prepare("SELECT * FROM presentations WHERE id = ? AND status = 'active'").get(id);
+  if (!p) return res.status(404).json({ error: 'Презентация не найдена' });
+  const body = req.body || {};
+  const sets = [];
+  const params = [];
+  for (const [key, column] of Object.entries(USAGE_FIELDS)) {
+    if (body[key] === undefined) continue;
+    sets.push(`${column} = ?`);
+    params.push(String(body[key] || '').trim().slice(0, 2000));
+  }
+  if (sets.length === 0) return res.status(400).json({ error: 'Нет полей для сохранения' });
+  params.push(id);
+  db.prepare(`UPDATE presentations SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   res.json(toPublic(db.prepare('SELECT * FROM presentations WHERE id = ?').get(id)));
 });
 

@@ -23,6 +23,8 @@ const store = createStore({
   homeView: 'idle', // idle | loading | search-results | build-result
   query: '',
   searchIntent: 'slide', // slide | presentation — что именно искал пользователь по последнему запросу
+  searchMode: 'slide', // режим, выбранный кнопками под строкой поиска: slide | presentation
+  menuOpen: false, // выпадающее меню за бургером в шапке
   searchResults: [],
   presentationResults: [],
   buildResult: null,
@@ -44,11 +46,6 @@ const store = createStore({
   uploads: [],
 });
 
-// ============ THEME (system preference, no persistence needed) ============
-document.documentElement.setAttribute(
-  'data-theme',
-  window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-);
 
 // ============ BOOTSTRAP ============
 async function bootstrap() {
@@ -67,28 +64,84 @@ async function bootstrap() {
   }
 }
 
-// ============ HEADER (shared shell for home/storage authenticated screens) ============
-function renderAppHeader(user) {
-  const header = h('header', { class: 'app-header' }, [
-    h('div', { class: 'brand' }, [
-      h('img', { class: 'brand-mark', src: 'assets/logo/fpg-logo.svg', alt: 'Фонд Президентских грантов' }),
+// ============ HEADER (общая шапка авторизованных экранов) ============
+// По макету: логотип слева, «Фонд слайдов» по центру, справа — чип пользователя и бургер.
+// За бургером — проводник, генерация таблиц/графиков, пользователи (для админа) и выход.
+function renderAppHeader(user, state) {
+  const menuItems = [
+    { id: 'home', label: 'Главная', icon: 'search', onClick: () => { closeMenu(); goHome(); }, active: state.screen === 'home' },
+    { id: 'storage', label: 'Проводник', icon: 'folderOpen', onClick: () => { closeMenu(); onOpenStorage(); }, active: state.screen === 'storage', testid: 'menu-storage' },
+    { id: 'generate', label: 'Создать таблицу или график по данным', icon: 'layers', onClick: () => { closeMenu(); onOpenGenerate(); }, active: state.screen === 'generate', testid: 'menu-generate' },
+    user.role === 'admin' && { id: 'users', label: 'Пользователи', icon: 'users', onClick: () => { closeMenu(); onOpenUsersAdmin(); }, testid: 'menu-users' },
+  ].filter(Boolean);
+
+  const burgerWrap = h('div', { class: 'burger-wrap' }, [
+    h('button', {
+      class: 'burger-btn', 'aria-label': 'Меню', 'aria-expanded': state.menuOpen ? 'true' : 'false', 'aria-haspopup': 'true',
+      'data-testid': 'button-menu',
+      onClick: (e) => { e.stopPropagation(); store.setState({ menuOpen: !store.getState().menuOpen }); },
+    }, [svgIcon('burger')]),
+    state.menuOpen && h('nav', { class: 'burger-menu', 'aria-label': 'Разделы', onClick: (e) => e.stopPropagation() }, [
+      ...menuItems.map((item) =>
+        h('button', { class: item.active ? 'active' : '', onClick: item.onClick, 'data-testid': item.testid || null }, [svgIcon(item.icon), item.label])
+      ),
+      h('div', { class: 'menu-sep' }),
+      h('button', { onClick: () => { closeMenu(); onLogout(); }, 'data-testid': 'menu-logout' }, [svgIcon('logout'), 'Выйти']),
     ]),
+  ]);
+
+  const initials = (user.displayName || user.login || '?').split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+
+  return h('header', { class: 'app-header' }, [
+    h('div', { class: 'brand' }, [
+      h('button', { class: 'brand', 'aria-label': 'На главную', onClick: goHome }, [
+        h('img', { class: 'brand-mark', src: 'assets/logo/fpg-logo.svg', alt: 'Фонд Президентских грантов' }),
+      ]),
+    ]),
+    h('h1', { class: 'app-title' }, [h('button', { onClick: goHome, 'aria-label': 'Фонд слайдов — на главную' }, 'Фонд слайдов')]),
     h('div', { class: 'header-actions' }, [
-      user.role === 'admin' &&
-        h('button', { class: 'icon-btn', 'aria-label': 'Управление пользователями', onClick: onOpenUsersAdmin, 'data-testid': 'button-users-admin' }, [
-          svgIcon('users'),
-        ]),
-      h('div', { class: 'auth-chip' }, [
-        h('div', { class: 'auth-chip-avatar' }, [svgIcon('users')]),
+      h('div', { class: 'auth-chip', 'data-testid': 'auth-chip' }, [
+        h('div', { class: 'auth-chip-avatar', 'aria-hidden': 'true' }, initials),
         h('div', { class: 'auth-chip-text' }, [
           h('span', { class: 'auth-chip-name' }, user.displayName),
           h('span', { class: 'auth-chip-role' }, ROLE_LABELS_RU[user.role]),
         ]),
-        h('button', { class: 'auth-chip-logout', 'aria-label': 'Выйти', onClick: onLogout, 'data-testid': 'button-logout' }, [svgIcon('logout')]),
+        h('button', { class: 'auth-chip-logout', 'aria-label': 'Выйти', title: 'Выйти', onClick: onLogout, 'data-testid': 'button-logout' }, [svgIcon('logout')]),
       ]),
+      burgerWrap,
     ]),
   ]);
-  return header;
+}
+
+function closeMenu() {
+  if (store.getState().menuOpen) store.setState({ menuOpen: false });
+}
+document.addEventListener('click', closeMenu);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+
+function goHome() {
+  const { screen } = store.getState();
+  if (screen === 'home') store.setState({ homeView: 'idle', query: '', searchResults: [], presentationResults: [], buildResult: null });
+  else store.setState({ screen: 'home' });
+}
+
+// Декор страницы из макета: теплое свечение сверху и два контурных параллелограмма.
+function renderPageDecor() {
+  return [
+    h('div', { class: 'page-glow', 'aria-hidden': 'true' }),
+    h('img', { class: 'page-deco page-deco-large', src: 'assets/deco-large.svg', alt: '', 'aria-hidden': 'true' }),
+    h('img', { class: 'page-deco page-deco-small', src: 'assets/deco-small.svg', alt: '', 'aria-hidden': 'true' }),
+  ];
+}
+
+function renderShell(state) {
+  root.classList.remove('is-login');
+  root.classList.toggle('is-home', state.screen === 'home');
+  const shell = h('div', { class: 'shell' }, [...renderPageDecor(), renderAppHeader(state.user, state)]);
+  mount(root, shell);
+  const bodyContainer = h('div', { class: 'view' });
+  shell.appendChild(bodyContainer);
+  return bodyContainer;
 }
 
 const ROLE_LABELS_RU = { reader: 'Читатель', editor: 'Редактор', admin: 'Администратор' };
@@ -125,11 +178,19 @@ function onSelectSpace(spaceId) {
   store.setState({ activeSpaceId: spaceId, homeView: 'idle', query: '', searchResults: [], presentationResults: [], buildResult: null });
 }
 
+// Режим под строкой поиска. Если результаты уже показаны — переискиваем тем же запросом.
+function onSetSearchMode(mode) {
+  const { searchMode, query, homeView } = store.getState();
+  if (mode === searchMode) return;
+  store.setState({ searchMode: mode });
+  if (homeView === 'search-results' && query) onSubmitSearch(query);
+}
+
 async function onSubmitSearch(query) {
   if (!query) return;
   store.setState({ query, homeView: 'loading' });
 
-  const { activeSpaceId } = store.getState();
+  const { activeSpaceId, searchMode } = store.getState();
 
   if (isBuildRequest(query)) {
     try {
@@ -159,7 +220,7 @@ async function onSubmitSearch(query) {
     }
   } else {
     try {
-      const data = await api.search(query, activeSpaceId);
+      const data = await api.search(query, activeSpaceId, searchMode);
       if (data.intent === 'generate_table' || data.intent === 'generate_chart') {
         // Block 3: строка поиска только распознаёт намерение и подбирает образец стиля из
         // пространства — саму генерацию (нужен файл Excel с данными) продолжаем на отдельном
@@ -180,6 +241,7 @@ async function onSubmitSearch(query) {
         searchResults: data.slides || [],
         presentationResults: data.presentations || [],
         searchIntent: data.intent || 'slide',
+        searchContext: { topicWords: data.topicWords || [], contextWords: data.contextWords || [] },
       });
     } catch (err) {
       showToast(err.message, 'error');
@@ -474,6 +536,38 @@ function removeUpload(localId) {
   store.setState({ uploads: uploads.filter((u) => u.localId !== localId) });
 }
 
+// Файлы, брошенные на папку в дереве: папка становится текущей, затем обычная загрузка.
+async function onDropFilesToFolder(folderId, fileList) {
+  if (store.getState().selectedFolderId !== folderId) {
+    onSelectFolder(folderId);
+    await loadPresentations(folderId);
+  }
+  return onFilesSelected(fileList);
+}
+
+// Перенос презентации в другую папку перетаскиванием карточки на папку дерева.
+async function onMovePresentationToFolder(presentationId, folderId) {
+  const { selectedFolderId, presentations } = store.getState();
+  if (!folderId || folderId === selectedFolderId) return;
+  const p = presentations.find((x) => x.id === presentationId);
+  try {
+    await api.movePresentation(presentationId, folderId);
+    const target = store.getState().folders.find((f) => f.id === folderId);
+    showToast(`«${p ? p.originalFilename : 'Презентация'}» перенесена в папку «${target ? target.name : ''}»`);
+    await loadPresentations(selectedFolderId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Блок «Где использовалась» — сохраняется целиком, сервер вернет обновленную карточку.
+async function onSaveUsage(id, usage) {
+  const updated = await api.updateUsage(id, usage);
+  const { presentations } = store.getState();
+  store.setState({ presentations: presentations.map((p) => (p.id === id ? { ...p, usage: updated.usage } : p)) });
+  showToast('Сведения об использовании сохранены');
+}
+
 async function onFilesSelected(fileList) {
   const { selectedFolderId, storageSpaceId } = store.getState();
   if (!selectedFolderId) {
@@ -682,20 +776,24 @@ function render() {
   }
 
   if (state.screen === 'login') {
-    mount(root, h('div', {}, [renderLoginSlot(state)]));
+    root.classList.add('is-login');
+    mount(root, h('div', { class: 'shell' }, [
+      ...renderPageDecor(),
+      h('header', { class: 'app-header' }, [
+        h('img', { class: 'brand-mark', src: 'assets/logo/fpg-logo.svg', alt: 'Фонд Президентских грантов' }),
+      ]),
+      renderLoginSlot(state),
+    ]));
     return;
   }
 
   if (state.screen === 'home') {
-    const shell = h('div', {}, [renderAppHeader(state.user)]);
-    mount(root, shell);
-    const bodyContainer = h('div', { class: 'view' });
-    shell.appendChild(bodyContainer);
+    const bodyContainer = renderShell(state);
 
     const resultsSlot = renderHome(
       bodyContainer,
-      { spaces: state.spaces, activeSpaceId: state.activeSpaceId, view: state.homeView, query: state.query },
-      { onSelectSpace, onSubmitSearch, onOpenStorage, onOpenGenerate }
+      { spaces: state.spaces, activeSpaceId: state.activeSpaceId, view: state.homeView, query: state.query, searchMode: state.searchMode },
+      { onSelectSpace, onSubmitSearch, onSetSearchMode }
     );
 
     if (state.homeView === 'loading') {
@@ -703,7 +801,7 @@ function render() {
     } else if (state.homeView === 'search-results') {
       renderSearchResults(
         resultsSlot,
-        { query: state.query, intent: state.searchIntent, slides: state.searchResults, presentations: state.presentationResults },
+        { query: state.query, intent: state.searchIntent, slides: state.searchResults, presentations: state.presentationResults, context: state.searchContext },
         { onBackHome, onPreviewSlide, onCopySlide, onOpenPresentation: onOpenPresentationFromSearch, onDownloadPresentation: onDownloadPresentationFromSearch }
       );
     } else if (state.homeView === 'build-result') {
@@ -713,10 +811,7 @@ function render() {
   }
 
   if (state.screen === 'generate') {
-    const shell = h('div', {}, [renderAppHeader(state.user)]);
-    mount(root, shell);
-    const bodyContainer = h('div', { class: 'view' });
-    shell.appendChild(bodyContainer);
+    const bodyContainer = renderShell(state);
 
     const generateActions = {
       api,
@@ -729,10 +824,7 @@ function render() {
   }
 
   if (state.screen === 'storage') {
-    const shell = h('div', {}, [renderAppHeader(state.user)]);
-    mount(root, shell);
-    const bodyContainer = h('div', { class: 'view' });
-    shell.appendChild(bodyContainer);
+    const bodyContainer = renderShell(state);
 
     const canEdit = state.user.role === 'editor' || state.user.role === 'admin';
     const slots = renderStorageShell(
@@ -764,6 +856,8 @@ function render() {
         onMoveUp: onMoveFolderUp,
         onMoveDown: onMoveFolderDown,
         onSortChildren: onSortFolderChildren,
+        onDropFiles: onDropFilesToFolder,
+        onDropPresentation: onMovePresentationToFolder,
       }
     );
 
@@ -786,6 +880,7 @@ function render() {
         onOpenGallery: onOpenGalleryForPresentation,
         onSaveSummary,
         onSaveSlideDescription,
+        onSaveUsage,
         onUploadClick: () => openFilePicker(onFilesSelected),
         onDismissUpload: removeUpload,
       }
