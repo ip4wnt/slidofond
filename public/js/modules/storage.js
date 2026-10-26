@@ -98,12 +98,6 @@ export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, 
           [toolbarIcon('trash')]
         ),
     ]),
-    canEdit &&
-      h(
-        'button',
-        { class: 'btn btn-fund', onClick: () => openFilePicker(actions.onFilesSelected), 'data-testid': 'button-upload' },
-        [svgIcon('upload'), 'Пополнить фонд']
-      ),
   ]);
 
   const folderPanel = h('div', { class: 'folder-panel' }, [

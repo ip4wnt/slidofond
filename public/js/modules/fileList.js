@@ -19,11 +19,7 @@ export function renderFileList(container, { presentations, uploads, expandedId, 
       h('div', { class: 'empty-state' }, [
         svgIcon('fileText'),
         h('p', {}, 'В этой папке пока нет презентаций.'),
-        canEdit &&
-          h('button', { class: 'btn btn-primary', onClick: actions.onUploadClick, 'data-testid': 'button-upload-empty' }, [
-            svgIcon('upload'),
-            'Загрузить презентацию',
-          ]),
+        canEdit && renderUploadInvite(actions, 'button-upload-empty'),
       ])
     );
     return;
@@ -32,8 +28,21 @@ export function renderFileList(container, { presentations, uploads, expandedId, 
   const list = h('div', { class: 'file-list' }, [
     ...uploadCards,
     ...presentations.map((p) => renderFileCard(p, p.id === highlightId, expandedId === p.id, currentUser, canEdit, actions)),
+    // В конце списка — такая же небольшая кнопка загрузки, как в пустой папке
+    canEdit && h('div', { class: 'file-list-footer' }, [renderUploadInvite(actions, 'button-upload-more')]),
   ]);
   container.replaceChildren(list);
+}
+
+// Небольшая кнопка загрузки с подсказкой: файлы можно и просто перетащить в папку.
+function renderUploadInvite(actions, testId) {
+  return h('div', { class: 'upload-invite' }, [
+    h('button', { class: 'btn btn-secondary btn-sm', onClick: actions.onUploadClick, 'data-testid': testId }, [
+      svgIcon('upload'),
+      'Загрузить презентацию',
+    ]),
+    h('p', { class: 'upload-invite-hint' }, 'Или просто перетащите файлы .pptx сюда или на папку в дереве слева'),
+  ]);
 }
 
 const UPLOAD_PHASE_LABELS = {

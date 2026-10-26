@@ -817,3 +817,9 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; text-wrap: 
 .maintenance-block h4 { margin: 0; font-size: var(--text-sm); }
 .maintenance-hint, .maintenance-status { font-size: var(--text-xs); color: var(--color-text-muted); margin: 0; }
 .maintenance-status:not(:empty) { color: var(--color-text); }
+
+/* Приглашение к загрузке: в пустой папке и в конце списка презентаций */
+.upload-invite { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
+.upload-invite .btn svg { width: 15px; height: 15px; }
+.upload-invite-hint { margin: 0; font-size: var(--text-xs); color: var(--color-text-faint); text-align: center; }
+.file-list-footer { display: flex; justify-content: center; padding: var(--space-6) 0 var(--space-4); }
