@@ -70,7 +70,14 @@ router.get('/:id/download', requireAuth, (req, res) => {
     return res.status(410).json({ error: 'Срок хранения файла истёк' });
   }
   if (!fs.existsSync(job.file_path)) return res.status(404).json({ error: 'Файл не найден на диске' });
-  res.download(job.file_path, 'presentation.pptx');
+  // Имя файла при скачивании можно задать параметром ?name= (например, для одного слайда — по его заголовку)
+  const requested = String(req.query.name || '').replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim().slice(0, 80);
+  const filename = requested ? `${requested.replace(/\.pptx$/i, '')}.pptx` : 'presentation.pptx';
+  // ASCII-запасное имя + полное имя в UTF-8 (RFC 5987): иначе кириллица в заголовке превращается в «?»
+  const asciiFallback = filename.replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim() || 'presentation.pptx';
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+  res.setHeader('Content-Disposition', `attachment; filename="${asciiFallback.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  res.sendFile(job.file_path);
 });
 
 module.exports = router;

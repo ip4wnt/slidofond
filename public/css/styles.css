@@ -798,3 +798,9 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; text-wrap: 
   .space-icon-img { width: 42px; height: 36px; }
   .page-deco-small { display: none; }
 }
+
+/* Переход из результатов поиска в проводник: карточка кратко подсвечивается */
+.file-card-highlight { box-shadow: 0 0 0 2px var(--color-accent-gold), 0 8px 24px rgba(251, 188, 0, 0.25); animation: card-highlight 2.4s ease-out forwards; }
+@keyframes card-highlight { 0%, 70% { box-shadow: 0 0 0 2px var(--color-accent-gold), 0 8px 24px rgba(251, 188, 0, 0.25); } 100% { box-shadow: none; } }
+.slide-card-actions-stack { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+.slide-card-actions-stack .btn { justify-content: center; }

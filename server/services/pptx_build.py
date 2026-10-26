@@ -40,6 +40,7 @@ CONTENT_TYPE_BY_EXT = {
     '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
     '.emf': 'image/x-emf', '.wmf': 'image/x-wmf', '.bmp': 'image/bmp', '.tiff': 'image/tiff',
     '.svg': 'image/svg+xml',
+    '.vml': 'application/vnd.openxmlformats-officedocument.vmlDrawing',
     '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     '.xls': 'application/vnd.ms-excel',
     '.bin': 'application/vnd.openxmlformats-officedocument.presentationml.printerSettings',
@@ -69,6 +70,33 @@ OTHER_PART_CONTENT_TYPE_BY_RELTYPE = {
     'http://schemas.microsoft.com/office/2011/relationships/chartColorStyle': 'application/vnd.ms-office.chartcolorstyle+xml',
     'http://schemas.microsoft.com/office/2011/relationships/chartStyle': 'application/vnd.ms-office.chartstyle+xml',
     f'{R_NS}/oleObject': 'application/vnd.openxmlformats-officedocument.oleObject',
+    # Пользовательские теги (<p:custDataLst><p:tags r:id=.../>) — на них ссылается XML слайда, поэтому
+    # часть нужно сохранить и объявить с правильным content-type (think-cell и т.п. их активно используют).
+    f'{R_NS}/tags': 'application/vnd.openxmlformats-officedocument.presentationml.tags+xml',
+    # SmartArt
+    f'{R_NS}/diagramData': 'application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml',
+    f'{R_NS}/diagramLayout': 'application/vnd.openxmlformats-officedocument.drawingml.diagramLayout+xml',
+    f'{R_NS}/diagramQuickStyle': 'application/vnd.openxmlformats-officedocument.drawingml.diagramStyle+xml',
+    f'{R_NS}/diagramColors': 'application/vnd.openxmlformats-officedocument.drawingml.diagramColors+xml',
+    'http://schemas.microsoft.com/office/2007/relationships/diagramDrawing': 'application/vnd.ms-office.drawingml.diagramDrawing+xml',
+}
+
+# Связи, которые при копировании слайда НЕ переносим. Заметки докладчика, комментарии и т.п. тянут за
+# собой notesMaster, обратную ссылку на исходный слайд (а через него — его layout, master и тему):
+# всё это раньше попадало в ppt/extra с content-type application/xml, и PowerPoint отказывался
+# открывать файл. В XML самого слайда на эти rId ссылок нет, поэтому их можно безопасно отбросить.
+SKIP_RELTYPES = {
+    f'{R_NS}/notesSlide',
+    f'{R_NS}/notesMaster',
+    f'{R_NS}/handoutMaster',
+    f'{R_NS}/comments',
+    f'{R_NS}/commentAuthors',
+    f'{R_NS}/customXml',
+    f'{R_NS}/slide',  # ссылки «слайд → другой слайд» (переходы по гиперссылкам) в сборку не переносим
+    'http://schemas.microsoft.com/office/2018/10/relationships/comments',
+    'http://schemas.microsoft.com/office/2018/10/relationships/authors',
+    'http://schemas.microsoft.com/office/2016/11/relationships/changesInfo',
+    'http://schemas.microsoft.com/office/2015/10/relationships/revisionInfo',
 }
 
 def qn(ns, tag):
@@ -170,6 +198,8 @@ class OutputPackage:
 
     def save(self, output_path):
         for part_name, rel_list in self.rels.items():
+            if not rel_list:
+                continue  # пустые .rels не пишем — они не нужны и только засоряют пакет
             rels_path = SourcePackage.rels_path_for(part_name)
             self.parts[rels_path] = self.rels_xml_bytes(rel_list)
 
@@ -224,6 +254,8 @@ def import_other_part(out_pkg, src_pkg, target, reltype, cache):
             continue
         rtype = rel['reltype']
         rtarget = rel['target']
+        if rtype in SKIP_RELTYPES:
+            continue
         if rtarget.startswith('ppt/media/'):
             new_media_name = copy_media_part(out_pkg, src_pkg, rtarget, new_name)
             new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_media_name, new_name), 'is_external': False})
@@ -262,6 +294,8 @@ def import_generic_part_with_rels(out_pkg, src_pkg, target, kind, referencing_co
             continue
         rtype = rel['reltype']
         rtarget = rel['target']
+        if rtype in SKIP_RELTYPES:
+            continue
         if rtype == RELTYPE_THEME:
             new_theme_name = import_generic_part_with_rels(out_pkg, src_pkg, rtarget, 'theme', referencing_context)
             new_rid = rel['rid']
@@ -314,6 +348,8 @@ def import_slide_master(out_pkg, src_pkg, master_target, cache, other_cache):
             continue
         rtype = rel['reltype']
         rtarget = rel['target']
+        if rtype in SKIP_RELTYPES:
+            continue
         if rtype == RELTYPE_SLIDE_LAYOUT:
             new_layout_name = import_generic_part_with_rels(
                 out_pkg, src_pkg, rtarget, 'slideLayout', {'master_new_name': new_master_name}, other_cache
@@ -352,6 +388,8 @@ def import_slide(out_pkg, src_pkg, slide_target, new_layout_name, other_cache):
             continue
         rtype = rel['reltype']
         rtarget = rel['target']
+        if rtype in SKIP_RELTYPES:
+            continue
         if rtype == RELTYPE_SLIDE_LAYOUT:
             new_rels.append({'rid': rel['rid'], 'reltype': rtype, 'target': rel_target_path(new_layout_name, new_slide_name), 'is_external': False})
         elif rtarget.startswith('ppt/media/'):

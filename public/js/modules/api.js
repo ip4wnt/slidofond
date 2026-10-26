@@ -124,7 +124,7 @@ export const api = {
 
   // build
   buildPresentation: (slideIds, queryText) => request('POST', '/api/build', { slideIds, queryText }),
-  buildDownloadUrl: (id) => apiBase() + `/api/build/${id}/download`,
+  buildDownloadUrl: (id, name) => apiBase() + `/api/build/${id}/download` + (name ? `?name=${encodeURIComponent(name)}` : ''),
 
   // generate (Block 3 — таблицы/графики по промпту в стиле образца)
   excelPreview: (file) => {

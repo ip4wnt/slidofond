@@ -83,15 +83,25 @@ function renderSlideGrid(slides, actions) {
           h('div', { class: 'slide-card-source' }, `Из файла: ${slide.originalFilename}`),
           usageLine(slide.usage) && h('div', { class: 'slide-card-usage' }, usageLine(slide.usage)),
         ]),
-        h('div', { class: 'slide-card-actions' }, [
+        h('div', { class: 'slide-card-actions slide-card-actions-stack' }, [
+          h(
+            'button',
+            {
+              class: 'btn btn-primary btn-sm',
+              onClick: () => actions.onCopySlide(slide),
+              'data-testid': `button-copy-${slide.slideId}`,
+            },
+            [svgIcon('download'), 'Скачать слайд']
+          ),
           h(
             'button',
             {
               class: 'btn btn-secondary btn-sm',
-              onClick: () => actions.onCopySlide(slide),
-              'data-testid': `button-copy-${slide.slideId}`,
+              title: 'Показать презентацию в проводнике: метаданные, скачивание файла целиком',
+              onClick: () => actions.onOpenInExplorer(slide),
+              'data-testid': `button-explorer-${slide.slideId}`,
             },
-            [svgIcon('copy'), 'Скопировать']
+            [svgIcon('folderOpen'), 'В проводнике']
           ),
         ]),
       ])

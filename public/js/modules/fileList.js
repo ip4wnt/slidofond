@@ -7,7 +7,7 @@ const STATUS_LABELS = { pending: 'В очереди', processing: 'Анализ�
 // Рендерит список презентаций в текущей папке.
 // presentations: [{...}], uploads: [{localId, fileName, progress, phase, errorMessage}], expandedId: id | null, currentUser: {id, role}
 // actions: { onToggleExpand, onDownload, onDelete, onOpenGallery, onSaveSummary, onSaveSlideDescription, onUploadClick, onDismissUpload }
-export function renderFileList(container, { presentations, uploads, expandedId, currentUser, canEdit }, actions) {
+export function renderFileList(container, { presentations, uploads, expandedId, highlightId, currentUser, canEdit }, actions) {
   const uploadCards = (uploads || []).map((u) => renderUploadCard(u, actions));
 
   if (presentations.length === 0) {
@@ -31,7 +31,7 @@ export function renderFileList(container, { presentations, uploads, expandedId, 
 
   const list = h('div', { class: 'file-list' }, [
     ...uploadCards,
-    ...presentations.map((p) => renderFileCard(p, expandedId === p.id, currentUser, canEdit, actions)),
+    ...presentations.map((p) => renderFileCard(p, p.id === highlightId, expandedId === p.id, currentUser, canEdit, actions)),
   ]);
   container.replaceChildren(list);
 }
@@ -69,7 +69,7 @@ function renderUploadCard(u, actions) {
   ]);
 }
 
-function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
+function renderFileCard(p, isHighlighted, isExpanded, currentUser, canEdit, actions) {
   const canDelete = currentUser.role === 'admin' || (canEdit && p.uploadedBy === currentUser.id);
   const firstSlidePreview = `/api/presentations/${p.id}/slides/0/preview`;
 
@@ -126,7 +126,7 @@ function renderFileCard(p, isExpanded, currentUser, canEdit, actions) {
 
   // Карточку можно перетащить на папку в дереве — презентация переедет туда (как в проводнике).
   return h('div', {
-    class: 'file-card',
+    class: `file-card ${isHighlighted ? 'file-card-highlight' : ''}`,
     'data-testid': `file-card-${p.id}`,
     draggable: canEdit ? 'true' : null,
     title: canEdit ? 'Перетащите на папку в дереве, чтобы перенести' : null,

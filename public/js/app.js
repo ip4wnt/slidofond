@@ -38,6 +38,7 @@ const store = createStore({
   selectedFolderId: null,
   presentations: [],
   expandedPresentationId: null,
+  highlightPresentationId: null, // карточка, к которой перешли из результатов поиска (кратко подсвечивается)
   cutFolderId: null,
 
   // Активные загрузки в этой папке: [{ localId, fileName, progress, phase, errorMessage }]
@@ -288,16 +289,61 @@ function onDownloadPresentationFromSearch(presentation) {
   window.open(api.downloadPresentationUrl(presentation.presentationId), '_blank');
 }
 
+// Открывает презентацию найденного слайда в проводнике: нужное пространство, папка, карточка
+// раскрыта на метаданных и подсвечена — оттуда можно скачать файл целиком и посмотреть, где он использовался.
+async function onOpenInExplorer(slide) {
+  const { folders: currentFolders, storageSpaceId } = store.getState();
+  try {
+    const folders = storageSpaceId === slide.spaceId && currentFolders.length ? currentFolders : await api.listFolders(slide.spaceId);
+    // раскрываем всех предков папки, чтобы она была видна в дереве
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    const expanded = new Set(store.getState().storageSpaceId === slide.spaceId ? store.getState().expandedFolderIds : []);
+    let cur = byId.get(slide.folderId);
+    while (cur) {
+      expanded.add(cur.id);
+      cur = cur.parentId ? byId.get(cur.parentId) : null;
+    }
+    const { fileSortBy, fileSortOrder } = store.getState();
+    const presentations = await api.listPresentations(slide.folderId, fileSortBy, fileSortOrder);
+    store.setState({
+      screen: 'storage',
+      storageSpaceId: slide.spaceId,
+      folders,
+      expandedFolderIds: expanded,
+      selectedFolderId: slide.folderId,
+      presentations,
+      expandedPresentationId: slide.presentationId,
+      highlightPresentationId: slide.presentationId,
+    });
+    requestAnimationFrame(() => {
+      const card = document.querySelector(`[data-testid="file-card-${slide.presentationId}"]`);
+      if (card) card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+    setTimeout(() => {
+      if (store.getState().highlightPresentationId === slide.presentationId) store.setState({ highlightPresentationId: null });
+    }, 2500);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 async function onCopySlide(slide) {
   try {
-    const built = await api.buildPresentation([slide.slideId], `Копия слайда: ${slide.title || ''}`);
+    const built = await api.buildPresentation([slide.slideId], `Слайд: ${slide.title || ''}`);
+    const base = (slide.originalFilename || 'presentation').replace(/\.pptx?$/i, '');
+    const name = `${base} - слайд ${(slide.index ?? 0) + 1}`;
+    // Скачиваем через blob, чтобы имя файла задавалось на клиенте и не зависело от разбора заголовков браузером
+    const response = await fetch(api.buildDownloadUrl(built.id, name), { credentials: 'same-origin' });
+    if (!response.ok) throw new Error('Не удалось скачать подготовленный файл');
+    const blobUrl = URL.createObjectURL(await response.blob());
     const link = document.createElement('a');
-    link.href = api.buildDownloadUrl(built.id);
-    link.download = `${(slide.title || 'slide').slice(0, 40)}.pptx`;
+    link.href = blobUrl;
+    link.download = `${name}.pptx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    showToast('Слайд подготовлен — скачайте файл и вставьте его в PowerPoint через «Вставить слайды из файла»', 'success');
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    showToast('Слайд скачивается отдельным файлом .pptx', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -802,7 +848,7 @@ function render() {
       renderSearchResults(
         resultsSlot,
         { query: state.query, intent: state.searchIntent, slides: state.searchResults, presentations: state.presentationResults, context: state.searchContext },
-        { onBackHome, onPreviewSlide, onCopySlide, onOpenPresentation: onOpenPresentationFromSearch, onDownloadPresentation: onDownloadPresentationFromSearch }
+        { onBackHome, onPreviewSlide, onCopySlide, onOpenInExplorer, onOpenPresentation: onOpenPresentationFromSearch, onDownloadPresentation: onDownloadPresentationFromSearch }
       );
     } else if (state.homeView === 'build-result') {
       renderBuildResult(resultsSlot, state.buildResult, { onBackHome });
@@ -871,7 +917,7 @@ function render() {
 
     renderFileList(
       slots.fileListSlot,
-      { presentations: state.presentations, uploads: state.uploads, expandedId: state.expandedPresentationId, currentUser: state.user, canEdit },
+      { presentations: state.presentations, uploads: state.uploads, expandedId: state.expandedPresentationId, highlightId: state.highlightPresentationId, currentUser: state.user, canEdit },
       {
         onToggleExpand: onToggleExpandPresentation,
         onDownload: (id) => window.open(api.downloadPresentationUrl(id), '_blank'),
