@@ -10,6 +10,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { UPLOADS_DIR, PREVIEWS_DIR } = require('../utils/paths');
 const { analyzePresentation } = require('../services/pptxAnalyzer');
 const { renderPreviews, previewPath } = require('../services/renderer');
+const { autoFillUsageDate, yearFromText } = require('../services/yearResolver');
 
 const router = express.Router();
 
@@ -70,6 +71,7 @@ function toPublic(p) {
     summaryText: p.summary_text,
     summaryStatus: p.summary_status,
     errorMessage: p.error_message || null,
+    year: yearFromText(p.usage_date), // год из поля «Когда» — для маркера в выдаче
     usage: {
       event: p.usage_event || '',
       speaker: p.usage_speaker || '',
@@ -214,6 +216,7 @@ router.post('/', requireAuth, requireRole('editor'), upload.single('file'), asyn
     );
 
   const presentationId = info.lastInsertRowid;
+  autoFillUsageDate(presentationId); // «Когда» по папке известно сразу, по дате файла уточнится после анализа
   res.status(201).json(toPublic(db.prepare('SELECT * FROM presentations WHERE id = ?').get(presentationId)));
 
   // Асинхронная обработка: не блокируем ответ клиенту
@@ -271,6 +274,7 @@ async function processPresentationAsync(presentationId, filePath) {
     analysis.file_modified_at,
     presentationId
   );
+  autoFillUsageDate(presentationId); // даты из свойств PPTX уже в базе — уточняем автогод, если папка года не дала
 
   // Рендерим превью слайдов в JPEG (может занять время для больших презентаций).
   // LibreOffice headless иногда падает с первой попытки (блокировка профиля при
@@ -325,6 +329,7 @@ router.patch('/:id/usage', requireAuth, requireRole('editor'), (req, res) => {
   if (sets.length === 0) return res.status(400).json({ error: 'Нет полей для сохранения' });
   params.push(id);
   db.prepare(`UPDATE presentations SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  autoFillUsageDate(id); // если «Когда» очистили — снова подставим год по папке или дате файла
   res.json(toPublic(db.prepare('SELECT * FROM presentations WHERE id = ?').get(id)));
 });
 
@@ -337,6 +342,7 @@ router.patch('/:id/move', requireAuth, requireRole('editor'), (req, res) => {
   const folder = db.prepare('SELECT * FROM folders WHERE id = ? AND space_id = ?').get(folderId, p.space_id);
   if (!folder) return res.status(400).json({ error: 'Папка не найдена в этом пространстве' });
   db.prepare('UPDATE presentations SET folder_id = ? WHERE id = ?').run(folderId, id);
+  autoFillUsageDate(id); // переехала в другую папку — автогод мог измениться (ручную дату не трогаем)
   res.json({ ok: true });
 });
 

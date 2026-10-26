@@ -794,6 +794,19 @@ async function onOpenUsersAdmin() {
           showToast(err.message, 'error');
         }
       },
+      onRebuildMetadata: async () => {
+        try {
+          const result = await api.rebuildMetadata();
+          showToast('Метаданные пересчитаны', 'success');
+          // если открыт проводник — обновим карточки, чтобы увидеть новые значения «Когда»
+          const { selectedFolderId, screen } = store.getState();
+          if (screen === 'storage' && selectedFolderId) await loadPresentations(selectedFolderId);
+          return result;
+        } catch (err) {
+          showToast(err.message, 'error');
+          return null;
+        }
+      },
       onDelete: async (id, login) => {
         const confirmed = await confirmDialog({ title: 'Удалить пользователя?', message: `Пользователь «${login}» будет удалён.` });
         if (!confirmed) return false;

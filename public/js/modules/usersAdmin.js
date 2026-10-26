@@ -90,10 +90,43 @@ export function openUsersAdminDialog(users, actions) {
       ]
     );
 
+    // Обслуживание базы: пересчет автоматических метаданных для всех уже загруженных презентаций
+    const maintenanceStatus = h('div', { class: 'maintenance-status', 'data-testid': 'rebuild-status' }, '');
+    const rebuildBtn = h(
+      'button',
+      {
+        class: 'btn btn-secondary btn-sm',
+        'data-testid': 'button-rebuild-metadata',
+        onClick: async () => {
+          rebuildBtn.disabled = true;
+          maintenanceStatus.textContent = 'Пересчитываем…';
+          const result = await actions.onRebuildMetadata();
+          rebuildBtn.disabled = false;
+          if (result && result.years) {
+            const y = result.years;
+            maintenanceStatus.textContent =
+              `Презентаций: ${y.total}. «Когда» заполнено по папке: ${y.byFolder}, по дате файла: ${y.byDate}, ` +
+              `введено вручную (не тронуто): ${y.manual}, не определено: ${y.unknown}. Изменено записей: ${y.changed}. Поисковые индексы пересобраны.`;
+          } else {
+            maintenanceStatus.textContent = '';
+          }
+        },
+      },
+      [svgIcon('refresh'), 'Пересчитать метаданные презентаций']
+    );
+    const maintenance = h('div', { class: 'maintenance-block' }, [
+      h('h4', {}, 'Обслуживание'),
+      h('p', { class: 'maintenance-hint' },
+        'Заполняет поле «Когда» для всех презентаций, где оно пустое или содержит только год: по папке с годом, иначе по дате изменения файла. ' +
+        'Значения, введенные вручную, не меняются. Также пересобирает поисковые индексы.'),
+      rebuildBtn,
+      maintenanceStatus,
+    ]);
+
     overlay.replaceChildren(
       h('div', { class: 'modal-box', style: 'max-width:720px;' }, [
         h('div', { class: 'modal-header' }, [h('h3', {}, 'Пользователи'), h('button', { class: 'icon-btn', onClick: close }, [svgIcon('x')])]),
-        h('div', { class: 'modal-body' }, [table, createForm]),
+        h('div', { class: 'modal-body' }, [table, createForm, maintenance]),
       ])
     );
   }

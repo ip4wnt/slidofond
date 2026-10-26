@@ -63,6 +63,7 @@ export const api = {
   listSpaces: () => request('GET', '/api/spaces'),
   createSpace: (data) => request('POST', '/api/spaces', data),
   updateSpace: (id, data) => request('PATCH', `/api/spaces/${id}`, data),
+  rebuildMetadata: () => request('POST', '/api/admin/rebuild-metadata', {}),
   deleteSpace: (id) => request('DELETE', `/api/spaces/${id}`),
 
   // folders

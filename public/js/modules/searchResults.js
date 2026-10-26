@@ -75,7 +75,10 @@ function renderSlideGrid(slides, actions) {
         h(
           'div',
           { class: 'slide-thumb', onClick: () => actions.onPreviewSlide(slide) },
-          [h('img', { src: slide.previewUrl, loading: 'lazy', alt: slide.title || 'Превью слайда' })]
+          [
+            h('img', { src: slide.previewUrl, loading: 'lazy', alt: slide.title || 'Превью слайда' }),
+            slide.year && h('span', { class: 'year-badge', title: 'Год презентации (из поля «Когда»)', 'data-testid': `year-${slide.slideId}` }, String(slide.year)),
+          ]
         ),
         h('div', { class: 'slide-card-body' }, [
           h('div', { class: 'slide-card-title' }, slide.title || 'Без названия'),
@@ -119,7 +122,10 @@ function renderPresentationGrid(presentations, actions) {
         h(
           'div',
           { class: 'slide-thumb', onClick: () => actions.onOpenPresentation(p) },
-          [h('img', { src: p.previewUrl, loading: 'lazy', alt: p.originalFilename || 'Превью презентации' })]
+          [
+            h('img', { src: p.previewUrl, loading: 'lazy', alt: p.originalFilename || 'Превью презентации' }),
+            p.year && h('span', { class: 'year-badge', title: 'Год презентации (из поля «Когда»)' }, String(p.year)),
+          ]
         ),
         h('div', { class: 'slide-card-body' }, [
           h('div', { class: 'slide-card-title' }, p.originalFilename || 'Без названия'),

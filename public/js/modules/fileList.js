@@ -161,7 +161,7 @@ function renderUsageBlock(p, canEdit, actions) {
     { key: 'event', label: 'Событие или повод', placeholder: 'Форум «Сообщество», отчет перед Советом, вебинар для НКО…' },
     { key: 'speaker', label: 'Кто выступал', placeholder: 'Фамилия, имя, должность' },
     { key: 'place', label: 'Где проходило', placeholder: 'Город, площадка или онлайн' },
-    { key: 'date', label: 'Когда', placeholder: '2025-03-14 или «март 2025»' },
+    { key: 'date', label: 'Когда', placeholder: 'Год подставляется сам (по папке или дате файла); можно уточнить: 14.03.2025 или «март 2025»' },
     { key: 'notes', label: 'Заметки', placeholder: 'Аудитория, для чего готовилась, что важно помнить…', wide: true, multiline: true },
   ];
   if (!canEdit) {

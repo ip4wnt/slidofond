@@ -2,6 +2,7 @@
 
 const express = require('express');
 const db = require('../db');
+const { yearFromText } = require('../services/yearResolver');
 const { requireAuth } = require('../middleware/auth');
 const { parseSearchQuery } = require('../services/queryParser');
 const { findStyleReference } = require('../services/styleReference');
@@ -115,6 +116,7 @@ function slideToPublic(r) {
     originalFilename: r.original_filename,
     spaceId: r.space_id,
     folderId: r.folder_id,
+    year: yearFromText(r.usage_date),
     usage: usageToPublic(r),
     contextMatched: !!r.context_matched,
     previewUrl: `/api/presentations/${r.presentation_id}/slides/${r.slide_index}/preview`,
@@ -130,6 +132,7 @@ function presentationToPublic(p) {
     slideCount: p.slide_count,
     spaceId: p.space_id,
     folderId: p.folder_id,
+    year: yearFromText(p.usage_date),
     uploadedAt: p.uploaded_at,
     fileCreatedAt: p.file_created_at,
     usage: usageToPublic(p),

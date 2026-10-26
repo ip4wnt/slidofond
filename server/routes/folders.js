@@ -3,6 +3,7 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { autoFillAllUsageDates } = require('../services/yearResolver');
 
 const router = express.Router();
 
@@ -65,6 +66,10 @@ router.patch('/:id', requireAuth, requireRole('editor'), (req, res) => {
     req.body.sortOrder !== undefined ? Number(req.body.sortOrder) : sortOrder !== undefined ? Number(sortOrder) : folder.sort_order,
     id
   );
+  // Имя или место папки изменилось — автогод в «Когда» у презентаций внутри мог измениться
+  if ((name !== undefined && name.trim() !== folder.name) || (parentId !== undefined && parentId !== folder.parent_id)) {
+    autoFillAllUsageDates(folder.space_id);
+  }
   res.json(toPublic(db.prepare('SELECT * FROM folders WHERE id = ?').get(id)));
 });
 

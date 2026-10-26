@@ -8,6 +8,7 @@ const { startCleanupScheduler } = require('./services/cleanup');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
+const adminRoutes = require('./routes/admin');
 const spaceRoutes = require('./routes/spaces');
 const folderRoutes = require('./routes/folders');
 const presentationRoutes = require('./routes/presentations');
@@ -37,6 +38,7 @@ app.use(
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/spaces', spaceRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/presentations', presentationRoutes);
