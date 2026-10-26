@@ -10,7 +10,7 @@
 SLIDEVAULT_DATA_DIR=/srv/slidevault-data
 ```
 
-Текущий рабочий сервер: `procurator@158.160.251.35`, код в `/opt/slidevault`, данные на втором диске (500 ГБ) в `/srv/slidevault-data`, сервис `slidevault.service`, окружение в `/etc/slidevault.env`, nginx проксирует 80 → 8000.
+Текущий рабочий сервер: `procurator@158.160.179.222`, код в `/opt/slidevault`, данные на втором диске (500 ГБ) в `/srv/slidevault-data`, сервис `slidevault.service`, окружение в `/etc/slidevault.env`, nginx проксирует 80 → 8000.
 
 ## 1. Требования на сервере
 
