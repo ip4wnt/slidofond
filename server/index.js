@@ -47,7 +47,20 @@ app.use('/api/search', searchRoutes);
 app.use('/api/build', buildRoutes);
 app.use('/api/generate', generateRoutes);
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(
+  express.static(path.join(__dirname, '..', 'public'), {
+    etag: true,
+    setHeaders(res, filePath) {
+      // Код интерфейса всегда перепроверяется у сервера (ETag), чтобы после
+      // обновления не оставалась старая версия в кеше браузера.
+      if (/\.(html|js|css)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-cache');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
+    },
+  })
+);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Не найдено' });
