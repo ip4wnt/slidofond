@@ -86,7 +86,11 @@ function renderFileCard(p, isHighlighted, isExpanded, currentUser, canEdit, acti
     h(
       'div',
       { class: 'file-card-thumb', onClick: () => actions.onOpenGallery(p) },
-      p.slideCount > 0 ? [h('img', { src: firstSlidePreview, loading: 'lazy', alt: 'Превью' })] : [svgIcon('fileText')]
+      p.summaryStatus === 'done' && p.slideCount > 0
+        ? [h('img', { src: firstSlidePreview, loading: 'lazy', alt: '' })]
+        : p.summaryStatus === 'pending' || p.summaryStatus === 'processing'
+          ? [h('div', { class: 'thumb-pending', 'data-testid': `thumb-pending-${p.id}` }, [h('div', { class: 'spinner' }), h('span', {}, 'Генерация превью')])]
+          : [svgIcon('fileText')]
     ),
     h('div', { class: 'file-card-body' }, [
       h('div', { class: 'file-card-title', title: p.originalFilename }, p.originalFilename),

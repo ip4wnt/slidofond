@@ -80,7 +80,7 @@ server {
     listen 80;
     server_name slidevault.example.com;
 
-    client_max_body_size 200M;  # презентации могут быть большими
+    client_max_body_size 0;  # без ограничения размера презентаций
 
     location / {
         proxy_pass http://127.0.0.1:8000;
