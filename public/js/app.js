@@ -75,7 +75,8 @@ function renderAppHeader(user, state) {
   const menuItems = [
     { id: 'home', label: 'Поиск', icon: 'search', onClick: () => { closeMenu(); goHome(); }, active: state.screen === 'home' },
     { id: 'storage', label: 'Проводник', icon: 'folderOpen', onClick: () => { closeMenu(); onOpenStorage(); }, active: state.screen === 'storage', testid: 'menu-storage' },
-    { id: 'generate', label: 'Создать таблицу или график по данным', icon: 'layers', onClick: () => { closeMenu(); onOpenGenerate(); }, active: state.screen === 'generate', testid: 'menu-generate' },
+    // Генерация таблиц/графиков по данным (экран generate) скрыта из меню до реализации
+    // полноценной генерации презентаций; код модуля сохранен.
     user.role === 'admin' && { id: 'users', label: 'Пользователи', icon: 'users', onClick: () => { closeMenu(); onOpenUsersAdmin(); }, testid: 'menu-users' },
   ].filter(Boolean);
 
