@@ -80,7 +80,7 @@ export function renderGenerateScreen(container, actions) {
     h('div', { class: 'generate-header' }, [
       h('button', { class: 'back-btn', onClick: actions.onBackHome, 'data-testid': 'button-generate-back' }, [
         svgIcon('back'),
-        'На главную',
+        'К поиску',
       ]),
       h('h1', {}, 'Генерация таблицы или графика'),
     ]),

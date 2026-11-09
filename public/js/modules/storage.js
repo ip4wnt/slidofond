@@ -11,7 +11,7 @@ export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, 
   const topBar = h('div', { class: 'storage-topbar' }, [
     h('button', { class: 'back-btn', onClick: actions.onBackHome, 'data-testid': 'button-storage-back' }, [
       svgIcon('back'),
-      'На главную',
+      'К поиску',
     ]),
     h(
       'div',
