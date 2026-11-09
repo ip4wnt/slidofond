@@ -66,11 +66,14 @@ async function bootstrap() {
 }
 
 // ============ HEADER (общая шапка авторизованных экранов) ============
-// По макету: логотип слева, «Фонд слайдов» по центру, справа — чип пользователя и бургер.
+// По макету: логотип слева, по центру — название текущего раздела («Поиск», «Проводник»…),
+// справа — чип пользователя и бургер.
 // За бургером — проводник, генерация таблиц/графиков, пользователи (для админа) и выход.
+const SCREEN_TITLES = { home: 'Поиск', storage: 'Проводник', generate: 'Таблицы и графики', users: 'Пользователи' };
+
 function renderAppHeader(user, state) {
   const menuItems = [
-    { id: 'home', label: 'Главная', icon: 'search', onClick: () => { closeMenu(); goHome(); }, active: state.screen === 'home' },
+    { id: 'home', label: 'Поиск', icon: 'search', onClick: () => { closeMenu(); goHome(); }, active: state.screen === 'home' },
     { id: 'storage', label: 'Проводник', icon: 'folderOpen', onClick: () => { closeMenu(); onOpenStorage(); }, active: state.screen === 'storage', testid: 'menu-storage' },
     { id: 'generate', label: 'Создать таблицу или график по данным', icon: 'layers', onClick: () => { closeMenu(); onOpenGenerate(); }, active: state.screen === 'generate', testid: 'menu-generate' },
     user.role === 'admin' && { id: 'users', label: 'Пользователи', icon: 'users', onClick: () => { closeMenu(); onOpenUsersAdmin(); }, testid: 'menu-users' },
@@ -99,7 +102,7 @@ function renderAppHeader(user, state) {
         h('img', { class: 'brand-mark', src: 'assets/logo/fpg-logo.svg', alt: 'Фонд Президентских грантов' }),
       ]),
     ]),
-    h('h1', { class: 'app-title' }, [h('button', { onClick: goHome, 'aria-label': 'Фонд слайдов — на главную' }, 'Фонд слайдов')]),
+    h('h1', { class: 'app-title' }, [h('button', { onClick: goHome, 'aria-label': 'К поиску', 'data-testid': 'app-title' }, SCREEN_TITLES[state.screen] || 'Поиск')]),
     h('div', { class: 'header-actions' }, [
       h('div', { class: 'auth-chip', 'data-testid': 'auth-chip' }, [
         h('div', { class: 'auth-chip-avatar', 'aria-hidden': 'true' }, initials),

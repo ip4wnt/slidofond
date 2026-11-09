@@ -34,7 +34,6 @@ export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, 
     ),
   ]);
 
-  const archiveTitle = h('div', { class: 'archive-title-band' }, [h('h1', {}, 'Проводник'), h('div', { class: 'explorer-hint' }, 'Перетащите файлы презентаций в папку или на папку в дереве; карточку можно перенести в другую папку перетаскиванием')]);
 
   const toolbar = h('div', { class: 'archive-toolbar' }, [
     h('div', { class: 'archive-toolbar-tools' }, [
@@ -169,7 +168,7 @@ export function renderStorageShell(container, { spaces, activeSpaceId, canEdit, 
   ]);
 
   const body = h('div', { class: 'storage-body' }, [folderPanel, filePanel]);
-  mount(container, h('div', { class: 'storage-view' }, [topBar, archiveTitle, toolbar, body]));
+  mount(container, h('div', { class: 'storage-view' }, [topBar, toolbar, body]));
 
   if (canEdit) {
     attachUploadZone(filePanel, actions.onFilesSelected);

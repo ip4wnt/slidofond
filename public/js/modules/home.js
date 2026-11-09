@@ -2,8 +2,7 @@ import { h, mount } from './render.js';
 import { svgIcon, spaceIcon } from './icons.js';
 
 // Главная по макету Figma (страница 1-136): строка поиска с золотой стрелкой, под ней
-// режимы «Найти слайд» / «Найти презентацию» / «Создать презентацию» (последний пока
-// недоступен), внизу экрана — пять пространств. Возвращает слот для результатов поиска.
+// режимы «Найти слайд» / «Найти презентацию», внизу экрана — пять пространств. Возвращает слот для результатов поиска.
 export function renderHome(container, { spaces, activeSpaceId, view, query, searchMode }, { onSelectSpace, onSubmitSearch, onSetSearchMode }) {
   const isIdle = view === 'idle';
 
@@ -27,7 +26,6 @@ export function renderHome(container, { spaces, activeSpaceId, view, query, sear
   const modes = [
     { id: 'slide', label: 'Найти слайд' },
     { id: 'presentation', label: 'Найти презентацию' },
-    { id: 'create', label: 'Создать презентацию', disabled: true, title: 'Сборка презентации по запросу появится позже' },
   ];
   const modeRow = h('div', { class: 'mode-row', role: 'group', 'aria-label': 'Режим поиска' }, modes.map((m) =>
     h('button', {
